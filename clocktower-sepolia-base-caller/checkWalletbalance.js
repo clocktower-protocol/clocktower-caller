@@ -23,6 +23,6 @@ async function checkWalletBalance() {
     console.error('Error fetching wallet balance:', error.message);
     throw error;
   }
-} 
+}  
 
 checkWalletBalance();
