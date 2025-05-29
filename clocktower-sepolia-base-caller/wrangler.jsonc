@@ -1,0 +1,36 @@
+
+ {
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "clocktower-sepolia-base-caller",
+	"main": "remit_script.js",
+	"compatibility_date": "2025-04-20",
+	"observability": {
+		"enabled": true
+	},
+	
+	"build": {
+		"command": "npm install",
+		"cwd": "."
+  	},
+
+	"analytics_engine_datasets": [
+		{
+		  "binding": "ANALYTICS",
+		  "dataset": "remit_logs"
+		}
+	],
+
+	"vars": { 
+		"ALCHEMY_URL_SEPOLIA_BASE" : "https://base-sepolia.g.alchemy.com/v2/",
+		"CLOCKTOWER_ADDRESS_SEPOLIA_BASE" : "0x6A0791Cd884f2199dC8F372f6715f675D2950922",
+		"CHAIN_ID" : "84532",
+		//"CALLER_ADDRESS" : "0x0000000000000000000000000000000000000000",
+		//"CALLER_PRIVATE_KEY" : "0x0000000000000000000000000000000000000000000000000000000000000000"
+	},
+
+	"triggers": {
+		"crons": ["30 0 * * *"]
+	}
+	
+	
+}
