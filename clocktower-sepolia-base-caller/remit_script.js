@@ -10,6 +10,13 @@ const abi = [
     outputs: [],
     stateMutability: 'nonpayable',
   },
+  {
+    name: 'nextUncheckedDay',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
 ];
 
 // Maximum recursion depth per cron invocation
@@ -28,14 +35,7 @@ export default {
     };
 
     async function desmond(recursionDepth = 0) {
-      if (recursionDepth >= MAX_RECURSION_DEPTH) {
-        logEntry.revertReason = `Max recursion depth (${MAX_RECURSION_DEPTH}) reached`;
-        return;
-      }
-
-      logEntry.recursionDepth = recursionDepth + 1;
-      console.log(`Recursion depth: ${logEntry.recursionDepth}`);
-
+      //checks if script has already been called for the day
       try {
         const url = `${env.ALCHEMY_URL_SEPOLIA_BASE}${env.ALCHEMY_API_KEY}`;
         const chainId = parseInt(env.CHAIN_ID, 10);
@@ -44,6 +44,33 @@ export default {
           chain: { id: chainId },
           transport: http(url),
         });
+
+        // Get current day
+        const currentTime = Math.floor(Date.now() / 1000); // Convert to seconds
+        const currentDay = currentTime / 86400;
+        console.log(`Current UTC time: ${currentTime}`);
+        console.log(`Current day: ${currentDay}`);
+
+        // Check nextUncheckedDay
+        const nextUncheckedDay = await publicClient.readContract({
+          address: env.CLOCKTOWER_ADDRESS_SEPOLIA_BASE,
+          abi,
+          functionName: 'nextUncheckedDay',
+        });
+        console.log(`Next unchecked day: ${nextUncheckedDay}`);
+
+        if(currentDay < nextUncheckedDay) {
+          console.log(`Script has already been called for the day`);
+          return;
+        }
+
+        if (recursionDepth >= MAX_RECURSION_DEPTH) {
+          logEntry.revertReason = `Max recursion depth (${MAX_RECURSION_DEPTH}) reached`;
+          return;
+        }
+
+        logEntry.recursionDepth = recursionDepth + 1;
+        console.log(`Recursion depth: ${logEntry.recursionDepth}`);
 
         const walletClient = createWalletClient({
           account: privateKeyToAccount(env.CALLER_PRIVATE_KEY),
@@ -105,7 +132,7 @@ export default {
             parseFloat(logEntry.balanceAfterEth),
             logEntry.recursionDepth
           ],
-          indexes: ['operation_type', 'status']
+          indexes: ['remit_execution_status']
         });
 
         // Recursive call on success
@@ -120,7 +147,7 @@ export default {
         env.ANALYTICS.writeDataPoint({
           blobs: ['remit_execution', 'error', error.message],
           doubles: [0],
-          indexes: ['operation_type', 'status']
+          indexes: ['remit_execution_status']
         });
       }
     }
