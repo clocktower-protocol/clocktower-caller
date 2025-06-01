@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, http, formatEther } from 'viem';
+import { createPublicClient, createWalletClient, http, formatEther, formatUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // Inline ABI (only includes remit function)
@@ -19,6 +19,17 @@ const abi = [
   },
 ];
 
+// ERC20 ABI for USDC balance checks
+const erc20Abi = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  }
+];
+
 // Maximum recursion depth per cron invocation
 const MAX_RECURSION_DEPTH = 5;
 
@@ -28,6 +39,8 @@ export default {
       timestamp: new Date().toISOString(),
       balanceBeforeEth: null,
       balanceAfterEth: null,
+      balanceBeforeUsdc: null,
+      balanceAfterUsdc: null,
       txHash: null,
       txStatus: null,
       revertReason: null,
@@ -80,10 +93,20 @@ export default {
           transport: http(url),
         });
 
-        // Get initial balance
+        // Get initial ETH balance
         const balance = await publicClient.getBalance({ address: env.CALLER_ADDRESS });
         logEntry.balanceBeforeEth = formatEther(balance);
-        console.log(`Balance Before: ${logEntry.balanceBeforeEth}`);
+        console.log(`ETH Balance Before: ${logEntry.balanceBeforeEth}`);
+
+        // Get initial USDC balance
+        const usdcBalance = await publicClient.readContract({
+          address: env.USDC_ADDRESS,
+          abi: erc20Abi,
+          functionName: 'balanceOf',
+          args: [env.CALLER_ADDRESS],
+        });
+        logEntry.balanceBeforeUsdc = formatUnits(usdcBalance, 6); // Hardcoded USDC decimals
+        console.log(`USDC Balance Before: ${logEntry.balanceBeforeUsdc}`);
 
         // Execute transaction
         const txHash = await walletClient.writeContract({
@@ -116,10 +139,20 @@ export default {
           console.log(`Failed: ${logEntry.revertReason}`);
         }
 
-        // Get final balance
+        // Get final ETH balance
         const balance2 = await publicClient.getBalance({ address: env.CALLER_ADDRESS });
         logEntry.balanceAfterEth = formatEther(balance2);
-        console.log(`Balance After: ${logEntry.balanceAfterEth}`);
+        console.log(`ETH Balance After: ${logEntry.balanceAfterEth}`);
+
+        // Get final USDC balance
+        const usdcBalance2 = await publicClient.readContract({
+          address: env.USDC_ADDRESS,
+          abi: erc20Abi,
+          functionName: 'balanceOf',
+          args: [env.CALLER_ADDRESS],
+        });
+        logEntry.balanceAfterUsdc = formatUnits(usdcBalance2, 6); // Hardcoded USDC decimals
+        console.log(`USDC Balance After: ${logEntry.balanceAfterUsdc}`);
 
         // Log to Analytics
         env.ANALYTICS.writeDataPoint({
@@ -132,6 +165,8 @@ export default {
           doubles: [
             parseFloat(logEntry.balanceBeforeEth),
             parseFloat(logEntry.balanceAfterEth),
+            parseFloat(logEntry.balanceBeforeUsdc),
+            parseFloat(logEntry.balanceAfterUsdc),
             logEntry.recursionDepth
           ],
           indexes: ['remit_execution_status']
