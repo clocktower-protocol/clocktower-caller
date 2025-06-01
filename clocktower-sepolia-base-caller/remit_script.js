@@ -59,11 +59,13 @@ export default {
         });
         console.log(`Next unchecked day: ${nextUncheckedDay}`);
 
+        // If the script has already been called for the day, return
         if(currentDay < nextUncheckedDay) {
           console.log(`Script has already been called for the day`);
           return;
         }
 
+        // If the script has reached the maximum recursion depth, return
         if (recursionDepth >= MAX_RECURSION_DEPTH) {
           logEntry.revertReason = `Max recursion depth (${MAX_RECURSION_DEPTH}) reached`;
           return;
@@ -88,7 +90,7 @@ export default {
           address: env.CLOCKTOWER_ADDRESS_SEPOLIA_BASE,
           abi,
           functionName: 'remit',
-          gas: 100000,
+          gas: 1000000,
         });
         logEntry.txHash = txHash;
         console.log(`Transaction sent: ${txHash}`);
