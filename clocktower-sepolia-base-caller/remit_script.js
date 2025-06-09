@@ -1,7 +1,7 @@
 import { createPublicClient, createWalletClient, http, formatEther, formatUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
-// Inline ABI (only includes remit function)
+// Inline ABI (only includes remit function and nextUncheckedDay function)
 const abi = [
   {
     name: 'remit',
@@ -44,6 +44,7 @@ export default {
       txHash: null,
       txStatus: null,
       revertReason: null,
+      chainName: 'baseSepolia',
       recursionDepth: 0
     };
 
@@ -160,7 +161,8 @@ export default {
             'remit_execution',
             logEntry.txStatus === 1 ? 'success' : 'failure',
             logEntry.txHash,
-            logEntry.revertReason
+            logEntry.revertReason,
+            logEntry.chainName
           ],
           doubles: [
             parseFloat(logEntry.balanceBeforeEth),
@@ -182,7 +184,7 @@ export default {
         logEntry.revertReason = error.cause?.reason || error.cause?.data || error.message;
         
         env.ANALYTICS.writeDataPoint({
-          blobs: ['remit_execution', 'error', error.message],
+          blobs: ['remit_execution', 'error', error.message, logEntry.chainName],
           doubles: [0],
           indexes: ['remit_execution_status']
         });
