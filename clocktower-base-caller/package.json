@@ -1,0 +1,19 @@
+{
+    "name": "clocktower-caller",
+    "version": "1.0.0",
+    "description": "Cloudflare Worker for Clocktower calling",
+    "main": "remit_script.js",
+    "type": "module",
+    "scripts": {
+     "dev": "wrangler dev",
+     "deploy": "wrangler deploy"
+    },
+    "dependencies": {
+     "dotenv": "^16.5.0",
+     "viem": "^2.21.1"
+    },
+    "devDependencies": {
+     "wrangler": "^4.16.0"
+    }
+   }
+   
