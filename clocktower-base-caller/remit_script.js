@@ -101,7 +101,7 @@ export default {
       }
     }
 
-    async function checksubs(day) {
+    async function checksubs() {
       try {
         const url = `${env.ALCHEMY_URL_BASE}${env.ALCHEMY_API_KEY}`;
         const chainId = parseInt(env.CHAIN_ID, 10);
@@ -118,16 +118,48 @@ export default {
         const dayOfQuarter = now.diff(dayjs.utc().startOf('quarter'), 'day') + 1; // 1-92
         const dayOfYear = now.dayOfYear(); // 1-366
 
+        // Validate day limits
+        if (dayOfMonth > 28) {
+          console.log(`Day of month (${dayOfMonth}) exceeds limit of 28`);
+          return false;
+        }
+        if (dayOfQuarter > 90) {
+          console.log(`Day of quarter (${dayOfQuarter}) exceeds limit of 90`);
+          return false;
+        }
+        if (dayOfYear > 365) {
+          console.log(`Day of year (${dayOfYear}) exceeds limit of 365`);
+          return false;
+        }
+
         // Loop through frequencies 0-3
         for (let frequency = 0; frequency <= 3; frequency++) {
-          console.log(`Checking frequency ${frequency} for day ${day}`);
+          let dueDay;
+          
+          // Map frequency to appropriate day type
+          switch (frequency) {
+            case 0: // Weekly
+              dueDay = dayOfWeek;
+              break;
+            case 1: // Monthly
+              dueDay = dayOfMonth;
+              break;
+            case 2: // Quarterly
+              dueDay = dayOfQuarter;
+              break;
+            case 3: // Yearly
+              dueDay = dayOfYear;
+              break;
+          }
+          
+          console.log(`Checking frequency ${frequency} (${frequency === 0 ? 'weekly' : frequency === 1 ? 'monthly' : frequency === 2 ? 'quarterly' : 'yearly'}) for dueDay ${dueDay}`);
           
           // Call getIdByTime function
           const idArray = await publicClient.readContract({
             address: env.CLOCKTOWER_ADDRESS_BASE,
             abi,
             functionName: 'getIdByTime',
-            args: [frequency, day],
+            args: [frequency, dueDay],
           });
           
           console.log(`Frequency ${frequency} returned ${idArray.length} IDs:`, idArray);
@@ -141,7 +173,7 @@ export default {
           }
         }
         
-        console.log(`No non-zero IDs found for day ${day}`);
+        console.log(`No non-zero IDs found for current time`);
         return false;
       } catch (error) {
         console.error('Checksubs Error:', error.message);
