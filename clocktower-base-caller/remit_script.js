@@ -319,8 +319,9 @@ export default {
 
     // Run preCheck first, then desmond if preCheck passes
     const shouldProceed = await preCheck();
+    console.log(`shouldProceed: ${shouldProceed}`);
     if (shouldProceed) {
-      await desmond();
+      //await desmond();
     } else {
       console.log('PreCheck failed, skipping desmond execution');
     }
