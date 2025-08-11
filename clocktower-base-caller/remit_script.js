@@ -97,7 +97,7 @@ export default {
           console.log(`PreCheck - Ready to proceed with remit execution`);
           return true;
         } else {
-          console.log(`PreCheck - No non-zero IDs found for current time`);
+          console.log(`PreCheck - No non-zero IDs found for checked range`);
           return false;
         }
       } catch (error) {
@@ -117,8 +117,11 @@ export default {
         });
 
         const currentDay = Math.floor(Date.now() / 1000) / 86400;
+        
+        // Convert BigInt to number for comparison
+        const nextUncheckedDayNum = Number(nextUncheckedDay);
 
-        for (let i = nextUncheckedDay; i <= currentDay; i++) {
+        for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
           const iUnix = i * 86400; // Convert to Unix epoch time
           const checkDay = dayjs.utc(iUnix * 1000); // Convert to dayjs UTC object (multiply by 1000 for milliseconds)
 
@@ -126,20 +129,29 @@ export default {
           //const now = dayjs.utc();
           const dayOfWeek = checkDay.day(); // 0-6 (Sunday = 0)
           const dayOfMonth = checkDay.date(); // 1-31
-          const dayOfQuarter = checkDay.diff(dayjs.utc().startOf('quarter'), 'day') + 1; // 1-92
-          const dayOfYear = checkDay.dayOfYear(); // 1-366
+          
+          // Calculate day of quarter (1-92) - manually find quarter start
+          const month = checkDay.month(); // 0-11
+          const quarter = Math.floor(month / 3); // 0, 1, 2, 3
+          const quarterStartMonth = quarter * 3; // 0, 3, 6, 9
+          const quarterStart = dayjs.utc([checkDay.year(), quarterStartMonth, 1]);
+          const dayOfQuarter = checkDay.diff(quarterStart, 'day') + 1;
+          
+          const dayOfYear = checkDay.diff(checkDay.startOf('year'), 'day') + 1; // 1-366
+          
+          console.log(`Day ${i}: ${checkDay.format('YYYY-MM-DD')}, Day of quarter: ${dayOfQuarter}`);
 
           // Validate day limits
           if (dayOfMonth > 28) {
             console.log(`Day of month (${dayOfMonth}) exceeds limit of 28`);
             return false;
           }
-          if (dayOfQuarter > 90) {
-            console.log(`Day of quarter (${dayOfQuarter}) exceeds limit of 90`);
+          if (dayOfQuarter <= 0 || dayOfQuarter > 90) {
+            console.log(`Day of quarter (${dayOfQuarter}) is invalid or exceeds limit of 90`);
             return false;
           }
-          if (dayOfYear > 365) {
-            console.log(`Day of year (${dayOfYear}) exceeds limit of 365`);
+          if (dayOfYear <= 0 || dayOfYear > 365) {
+            console.log(`Day of year (${dayOfYear}) is invalid or exceeds limit of 365`);
             return false;
           }
 
@@ -184,9 +196,11 @@ export default {
             }
           }
           
-          console.log(`No non-zero IDs found for current time`);
-          return false;
+          console.log(`No non-zero IDs found for day ${i}`);
         }
+        
+        console.log(`No non-zero IDs found for checked range`);
+        return false;
       } catch (error) {
         console.error('Checksubs Error:', error.message);
         return false;
