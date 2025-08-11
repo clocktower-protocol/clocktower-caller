@@ -1,5 +1,8 @@
 import { createPublicClient, createWalletClient, http, formatEther, formatUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+dayjs.extend(utc);
 
 
 // Inline ABI (only includes remit function and nextUncheckedDay function)
@@ -107,6 +110,13 @@ export default {
           chain: { id: chainId },
           transport: http(url),
         });
+
+        //converts day to dueDay by frequency
+        const now = dayjs.utc();
+        const dayOfWeek = now.day(); // 0-6 (Sunday = 0)
+        const dayOfMonth = now.date(); // 1-31
+        const dayOfQuarter = now.diff(dayjs.utc().startOf('quarter'), 'day') + 1; // 1-92
+        const dayOfYear = now.dayOfYear(); // 1-366
 
         // Loop through frequencies 0-3
         for (let frequency = 0; frequency <= 3; frequency++) {
