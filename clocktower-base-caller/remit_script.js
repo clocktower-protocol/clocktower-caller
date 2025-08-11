@@ -92,16 +92,21 @@ export default {
           console.log(`PreCheck - Script has already been called for the day`);
           return false;
         }
-
-        console.log(`PreCheck - Ready to proceed with remit execution`);
-        return true;
+        
+        if(await checksubs(nextUncheckedDay)) {
+          console.log(`PreCheck - Ready to proceed with remit execution`);
+          return true;
+        } else {
+          console.log(`PreCheck - No non-zero IDs found for current time`);
+          return false;
+        }
       } catch (error) {
         console.error('PreCheck Error:', error.message);
         return false;
       }
     }
 
-    async function checksubs() {
+    async function checksubs(nextUncheckedDay) {
       try {
         const url = `${env.ALCHEMY_URL_BASE}${env.ALCHEMY_API_KEY}`;
         const chainId = parseInt(env.CHAIN_ID, 10);
@@ -111,70 +116,77 @@ export default {
           transport: http(url),
         });
 
-        //converts day to dueDay by frequency
-        const now = dayjs.utc();
-        const dayOfWeek = now.day(); // 0-6 (Sunday = 0)
-        const dayOfMonth = now.date(); // 1-31
-        const dayOfQuarter = now.diff(dayjs.utc().startOf('quarter'), 'day') + 1; // 1-92
-        const dayOfYear = now.dayOfYear(); // 1-366
+        const currentDay = Math.floor(Date.now() / 1000) / 86400;
 
-        // Validate day limits
-        if (dayOfMonth > 28) {
-          console.log(`Day of month (${dayOfMonth}) exceeds limit of 28`);
-          return false;
-        }
-        if (dayOfQuarter > 90) {
-          console.log(`Day of quarter (${dayOfQuarter}) exceeds limit of 90`);
-          return false;
-        }
-        if (dayOfYear > 365) {
-          console.log(`Day of year (${dayOfYear}) exceeds limit of 365`);
-          return false;
-        }
+        for (let i = nextUncheckedDay; i <= currentDay; i++) {
+          const iUnix = i * 86400; // Convert to Unix epoch time
+          const checkDay = dayjs.utc(iUnix * 1000); // Convert to dayjs UTC object (multiply by 1000 for milliseconds)
 
-        // Loop through frequencies 0-3
-        for (let frequency = 0; frequency <= 3; frequency++) {
-          let dueDay;
-          
-          // Map frequency to appropriate day type
-          switch (frequency) {
-            case 0: // Weekly
-              dueDay = dayOfWeek;
-              break;
-            case 1: // Monthly
-              dueDay = dayOfMonth;
-              break;
-            case 2: // Quarterly
-              dueDay = dayOfQuarter;
-              break;
-            case 3: // Yearly
-              dueDay = dayOfYear;
-              break;
+          //converts day to dueDay by frequency
+          //const now = dayjs.utc();
+          const dayOfWeek = checkDay.day(); // 0-6 (Sunday = 0)
+          const dayOfMonth = checkDay.date(); // 1-31
+          const dayOfQuarter = checkDay.diff(dayjs.utc().startOf('quarter'), 'day') + 1; // 1-92
+          const dayOfYear = checkDay.dayOfYear(); // 1-366
+
+          // Validate day limits
+          if (dayOfMonth > 28) {
+            console.log(`Day of month (${dayOfMonth}) exceeds limit of 28`);
+            return false;
           }
-          
-          console.log(`Checking frequency ${frequency} (${frequency === 0 ? 'weekly' : frequency === 1 ? 'monthly' : frequency === 2 ? 'quarterly' : 'yearly'}) for dueDay ${dueDay}`);
-          
-          // Call getIdByTime function
-          const idArray = await publicClient.readContract({
-            address: env.CLOCKTOWER_ADDRESS_BASE,
-            abi,
-            functionName: 'getIdByTime',
-            args: [frequency, dueDay],
-          });
-          
-          console.log(`Frequency ${frequency} returned ${idArray.length} IDs:`, idArray);
-          
-          // Check if any ID in the array is non-zero
-          for (const id of idArray) {
-            if (id !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-              console.log(`Found non-zero ID: ${id} at frequency ${frequency}`);
-              return true;
+          if (dayOfQuarter > 90) {
+            console.log(`Day of quarter (${dayOfQuarter}) exceeds limit of 90`);
+            return false;
+          }
+          if (dayOfYear > 365) {
+            console.log(`Day of year (${dayOfYear}) exceeds limit of 365`);
+            return false;
+          }
+
+          // Loop through frequencies 0-3
+          for (let frequency = 0; frequency <= 3; frequency++) {
+            let dueDay;
+            
+            // Map frequency to appropriate day type
+            switch (frequency) {
+              case 0: // Weekly
+                dueDay = dayOfWeek;
+                break;
+              case 1: // Monthly
+                dueDay = dayOfMonth;
+                break;
+              case 2: // Quarterly
+                dueDay = dayOfQuarter;
+                break;
+              case 3: // Yearly
+                dueDay = dayOfYear;
+                break;
+            }
+            
+            console.log(`Checking frequency ${frequency} (${frequency === 0 ? 'weekly' : frequency === 1 ? 'monthly' : frequency === 2 ? 'quarterly' : 'yearly'}) for dueDay ${dueDay}`);
+            
+            // Call getIdByTime function
+            const idArray = await publicClient.readContract({
+              address: env.CLOCKTOWER_ADDRESS_BASE,
+              abi,
+              functionName: 'getIdByTime',
+              args: [frequency, dueDay],
+            });
+            
+            console.log(`Frequency ${frequency} returned ${idArray.length} IDs:`, idArray);
+            
+            // Check if any ID in the array is non-zero
+            for (const id of idArray) {
+              if (id !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+                console.log(`Found non-zero ID: ${id} at frequency ${frequency}`);
+                return true;
+              }
             }
           }
+          
+          console.log(`No non-zero IDs found for current time`);
+          return false;
         }
-        
-        console.log(`No non-zero IDs found for current time`);
-        return false;
       } catch (error) {
         console.error('Checksubs Error:', error.message);
         return false;
