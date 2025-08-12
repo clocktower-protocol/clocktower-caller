@@ -125,10 +125,10 @@ export default {
           const iUnix = i * 86400; // Convert to Unix epoch time
           const checkDay = dayjs.utc(iUnix * 1000); // Convert to dayjs UTC object (multiply by 1000 for milliseconds)
 
-          //converts day to dueDay by frequency
-          //const now = dayjs.utc();
-          const dayOfWeek = checkDay.day(); // 0-6 (Sunday = 0)
-          const dayOfMonth = checkDay.date(); // 1-31
+                     //converts day to dueDay by frequency
+           //const now = dayjs.utc();
+           const dayOfWeek = checkDay.day() === 0 ? 7 : checkDay.day(); // Convert Sunday from 0 to 7
+           const dayOfMonth = checkDay.date(); // 1-31
           
           // Calculate day of quarter (1-92) - manually find quarter start
           const month = checkDay.month(); // 0-11
