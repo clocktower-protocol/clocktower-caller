@@ -20,6 +20,14 @@
 		}
 	],
 
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "clocktower_caller_logs",
+			"database_id": "a667a81c-b357-4608-b0d3-e9e635f10a16"
+		}
+	],
+
 	"vars": { 
 		"ALCHEMY_URL_SEPOLIA_BASE" : "https://base-sepolia.g.alchemy.com/v2/",
 		"CLOCKTOWER_ADDRESS_SEPOLIA_BASE" : "0x6A0791Cd884f2199dC8F372f6715f675D2950922",
