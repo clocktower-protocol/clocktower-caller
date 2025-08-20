@@ -75,7 +75,7 @@ export default {
 
         // Get current day
         const currentTime = Math.floor(Date.now() / 1000); // Convert to seconds
-        const currentDay = currentTime / 86400;
+        const currentDay = Math.floor(currentTime / 86400);
         console.log(`PreCheck - Current UTC time: ${currentTime}`);
         console.log(`PreCheck - Current day: ${currentDay}`);
 
@@ -116,7 +116,7 @@ export default {
           transport: http(url),
         });
 
-        const currentDay = Math.floor(Date.now() / 1000) / 86400;
+        const currentDay = Math.floor(Math.floor(Date.now() / 1000) / 86400);
         
         // Convert BigInt to number for comparison
         const nextUncheckedDayNum = Number(nextUncheckedDay);
@@ -336,6 +336,7 @@ export default {
     console.log(`shouldProceed: ${shouldProceed}`);
     if (shouldProceed) {
       //await desmond();
+      console.log('PreCheck passed, executing desmond');
     } else {
       console.log('PreCheck failed, skipping desmond execution');
     }
