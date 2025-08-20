@@ -50,18 +50,68 @@ const MAX_RECURSION_DEPTH = 5;
 
 export default {
   async scheduled(event, env, ctx) {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      balanceBeforeEth: null,
-      balanceAfterEth: null,
-      balanceBeforeUsdc: null,
-      balanceAfterUsdc: null,
-      txHash: null,
-      txStatus: null,
-      revertReason: null,
-      chainName: 'base',
-      recursionDepth: 0
-    };
+    const executionId = `exec_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const startTime = Date.now();
+    
+    // Database logging functions
+    async function logToDatabase(data) {
+      try {
+        const result = await env.DB.prepare(`
+          INSERT INTO execution_logs (
+            execution_id, timestamp, chain_name, precheck_passed, current_day, 
+            next_unchecked_day, should_proceed, tx_hash, tx_status, revert_reason,
+            balance_before_eth, balance_after_eth, recursion_depth, 
+            error_message, execution_time_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          data.execution_id,
+          data.timestamp,
+          data.chain_name,
+          data.precheck_passed,
+          data.current_day,
+          data.next_unchecked_day,
+          data.should_proceed,
+          data.tx_hash,
+          data.tx_status,
+          data.revert_reason,
+          data.balance_before_eth,
+          data.balance_after_eth,
+          data.recursion_depth,
+          data.error_message,
+          data.execution_time_ms
+        ).run();
+        
+        return result.meta.last_row_id;
+      } catch (error) {
+        console.error('Database logging error:', error);
+      }
+    }
+
+    async function logTokenBalance(executionLogId, tokenAddress, balanceBefore, balanceAfter) {
+      try {
+        // Get or create token record
+        let token = await env.DB.prepare(`
+          SELECT id FROM tokens WHERE token_address = ? AND chain_name = ?
+        `).bind(tokenAddress, 'base').first();
+        
+        if (!token) {
+          // Insert new token if not exists
+          const tokenResult = await env.DB.prepare(`
+            INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(tokenAddress, 'USDC', 'USD Coin', 6, 'base').run();
+          token = { id: tokenResult.meta.last_row_id };
+        }
+        
+        // Insert token balance
+        await env.DB.prepare(`
+          INSERT INTO token_balances (execution_log_id, token_id, balance_before, balance_after)
+          VALUES (?, ?, ?, ?)
+        `).bind(executionLogId, token.id, balanceBefore, balanceAfter).run();
+      } catch (error) {
+        console.error('Token balance logging error:', error);
+      }
+    }
 
     async function preCheck() {
       try {
@@ -93,15 +143,48 @@ export default {
           return false;
         }
         
-        if(await checksubs(nextUncheckedDay)) {
-          console.log(`PreCheck - Ready to proceed with remit execution`);
-          return true;
-        } else {
-          console.log(`PreCheck - No non-zero IDs found for checked range`);
-          return false;
-        }
+        const shouldProceed = await checksubs(nextUncheckedDay);
+        console.log(`PreCheck - Should proceed: ${shouldProceed}`);
+        
+        // Log precheck results to database
+        await logToDatabase({
+          execution_id: executionId,
+          timestamp: new Date().toISOString(),
+          chain_name: 'base',
+          precheck_passed: true,
+          current_day: currentDay,
+          next_unchecked_day: Number(nextUncheckedDay),
+          should_proceed: shouldProceed,
+          tx_hash: null,
+          tx_status: null,
+          revert_reason: null,
+          balance_before_eth: null,
+          balance_after_eth: null,
+          recursion_depth: 0,
+          error_message: null,
+          execution_time_ms: Date.now() - startTime
+        });
+        
+        return shouldProceed;
       } catch (error) {
-        console.error('PreCheck Error:', error.message);
+        // Log precheck error to database
+        await logToDatabase({
+          execution_id: executionId,
+          timestamp: new Date().toISOString(),
+          chain_name: 'base',
+          precheck_passed: false,
+          current_day: null,
+          next_unchecked_day: null,
+          should_proceed: false,
+          tx_hash: null,
+          tx_status: null,
+          revert_reason: null,
+          balance_before_eth: null,
+          balance_after_eth: null,
+          recursion_depth: 0,
+          error_message: error.message,
+          execution_time_ms: Date.now() - startTime
+        });
         return false;
       }
     }
@@ -216,17 +299,31 @@ export default {
           chain: { id: chainId },
           transport: http(url),
         });
-  
-
 
         // If the script has reached the maximum recursion depth, return
         if (recursionDepth >= MAX_RECURSION_DEPTH) {
-          logEntry.revertReason = `Max recursion depth (${MAX_RECURSION_DEPTH}) reached`;
+          console.log(`Max recursion depth (${MAX_RECURSION_DEPTH}) reached`);
+          await logToDatabase({
+            execution_id: executionId,
+            timestamp: new Date().toISOString(),
+            chain_name: 'base',
+            precheck_passed: true,
+            current_day: null,
+            next_unchecked_day: null,
+            should_proceed: true,
+            tx_hash: null,
+            tx_status: null,
+            revert_reason: `Max recursion depth (${MAX_RECURSION_DEPTH}) reached`,
+            balance_before_eth: null,
+            balance_after_eth: null,
+            recursion_depth: recursionDepth,
+            error_message: null,
+            execution_time_ms: Date.now() - startTime
+          });
           return;
         }
 
-        logEntry.recursionDepth = recursionDepth + 1;
-        console.log(`Recursion depth: ${logEntry.recursionDepth}`);
+        console.log(`Recursion depth: ${recursionDepth + 1}`);
 
         const walletClient = createWalletClient({
           account: privateKeyToAccount(env.CALLER_PRIVATE_KEY),
@@ -236,8 +333,8 @@ export default {
 
         // Get initial ETH balance
         const balance = await publicClient.getBalance({ address: env.CALLER_ADDRESS });
-        logEntry.balanceBeforeEth = formatEther(balance);
-        console.log(`ETH Balance Before: ${logEntry.balanceBeforeEth}`);
+        const balanceBeforeEth = formatEther(balance);
+        console.log(`ETH Balance Before: ${balanceBeforeEth}`);
 
         // Get initial USDC balance
         const usdcBalance = await publicClient.readContract({
@@ -246,8 +343,8 @@ export default {
           functionName: 'balanceOf',
           args: [env.CALLER_ADDRESS],
         });
-        logEntry.balanceBeforeUsdc = formatUnits(usdcBalance, 6); // Hardcoded USDC decimals
-        console.log(`USDC Balance Before: ${logEntry.balanceBeforeUsdc}`);
+        const balanceBeforeUsdc = formatUnits(usdcBalance, 6);
+        console.log(`USDC Balance Before: ${balanceBeforeUsdc}`);
 
         // Execute transaction
         const txHash = await walletClient.writeContract({
@@ -256,16 +353,16 @@ export default {
           functionName: 'remit',
           gas: 1000000,
         });
-        logEntry.txHash = txHash;
         console.log(`Transaction sent: ${txHash}`);
 
         // Wait for confirmation
         const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-        logEntry.txStatus = receipt.status === 'success' ? 1 : 0;
-        console.log(`Transaction status: ${logEntry.txStatus}`);
+        const txStatus = receipt.status === 'success' ? 1 : 0;
+        console.log(`Transaction status: ${txStatus}`);
+        let revertReason = null;
 
         // Handle failure
-        if (logEntry.txStatus === 0) {
+        if (txStatus === 0) {
           try {
             const tx = await publicClient.getTransaction({ hash: txHash });
             const result = await publicClient.call({
@@ -273,17 +370,17 @@ export default {
               to: env.CLOCKTOWER_ADDRESS_BASE,
               data: tx.input,
             });
-            logEntry.revertReason = result.error?.message || 'Transaction failed';
+            revertReason = result.error?.message || 'Transaction failed';
           } catch (error) {
-            logEntry.revertReason = error.message || 'Failed to get revert reason';
+            revertReason = error.message || 'Failed to get revert reason';
           }
-          console.log(`Failed: ${logEntry.revertReason}`);
+          console.log(`Failed: ${revertReason}`);
         }
 
         // Get final ETH balance
         const balance2 = await publicClient.getBalance({ address: env.CALLER_ADDRESS });
-        logEntry.balanceAfterEth = formatEther(balance2);
-        console.log(`ETH Balance After: ${logEntry.balanceAfterEth}`);
+        const balanceAfterEth = formatEther(balance2);
+        console.log(`ETH Balance After: ${balanceAfterEth}`);
 
         // Get final USDC balance
         const usdcBalance2 = await publicClient.readContract({
@@ -292,41 +389,56 @@ export default {
           functionName: 'balanceOf',
           args: [env.CALLER_ADDRESS],
         });
-        logEntry.balanceAfterUsdc = formatUnits(usdcBalance2, 6); // Hardcoded USDC decimals
-        console.log(`USDC Balance After: ${logEntry.balanceAfterUsdc}`);
+        const balanceAfterUsdc = formatUnits(usdcBalance2, 6);
+        console.log(`USDC Balance After: ${balanceAfterUsdc}`);
 
-        // Log to Analytics
-        env.ANALYTICS.writeDataPoint({
-          blobs: [
-            'remit_execution',
-            logEntry.txStatus === 1 ? 'success' : 'failure',
-            logEntry.txHash,
-            logEntry.revertReason,
-            logEntry.chainName
-          ],
-          doubles: [
-            parseFloat(logEntry.balanceBeforeEth),
-            parseFloat(logEntry.balanceAfterEth),
-            parseFloat(logEntry.balanceBeforeUsdc),
-            parseFloat(logEntry.balanceAfterUsdc),
-            logEntry.recursionDepth
-          ],
-          indexes: ['remit_execution_status']
+        // Log to database
+        const executionLogId = await logToDatabase({
+          execution_id: executionId,
+          timestamp: new Date().toISOString(),
+          chain_name: 'base',
+          precheck_passed: true,
+          current_day: null,
+          next_unchecked_day: null,
+          should_proceed: true,
+          tx_hash: txHash,
+          tx_status: txStatus,
+          revert_reason: revertReason,
+          balance_before_eth: parseFloat(balanceBeforeEth),
+          balance_after_eth: parseFloat(balanceAfterEth),
+          recursion_depth: recursionDepth,
+          error_message: null,
+          execution_time_ms: Date.now() - startTime
         });
 
+        // Log token balances
+        if (executionLogId) {
+          await logTokenBalance(executionLogId, env.USDC_ADDRESS, parseFloat(balanceBeforeUsdc), parseFloat(balanceAfterUsdc));
+        }
+
         // Recursive call on success
-        if (logEntry.txStatus === 1) {
+        if (txStatus === 1) {
           await desmond(recursionDepth + 1);
         }
 
       } catch (error) {
         console.error('Error:', error.message);
-        logEntry.revertReason = error.cause?.reason || error.cause?.data || error.message;
-        
-        env.ANALYTICS.writeDataPoint({
-          blobs: ['remit_execution', 'error', error.message, logEntry.chainName],
-          doubles: [0],
-          indexes: ['remit_execution_status']
+        await logToDatabase({
+          execution_id: executionId,
+          timestamp: new Date().toISOString(),
+          chain_name: 'base',
+          precheck_passed: true,
+          current_day: null,
+          next_unchecked_day: null,
+          should_proceed: true,
+          tx_hash: null,
+          tx_status: null,
+          revert_reason: null,
+          balance_before_eth: null,
+          balance_after_eth: null,
+          recursion_depth: recursionDepth,
+          error_message: error.message,
+          execution_time_ms: Date.now() - startTime
         });
       }
     }
