@@ -9,6 +9,7 @@
   "deploy": "wrangler deploy"
  },
  "dependencies": {
+  "dayjs": "^1.11.10",
   "dotenv": "^16.5.0",
   "viem": "^2.21.1"
  },
