@@ -197,7 +197,7 @@ export default {
           transport: http(url),
         });
 
-        const currentDay = Math.floor(Math.floor(Date.now() / 1000) / 86400);
+        const currentDay = Math.floor(Date.now() / 1000 / 86400);
         
         // Convert BigInt to number for comparison
         const nextUncheckedDayNum = Number(nextUncheckedDay);
