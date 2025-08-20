@@ -13,13 +13,6 @@
 		"cwd": "."
   	},
 
-	"analytics_engine_datasets": [
-		{
-		  "binding": "ANALYTICS",
-		  "dataset": "remit_logs"
-		}
-	],
-
 	"d1_databases": [
 		{
 			"binding": "DB",
