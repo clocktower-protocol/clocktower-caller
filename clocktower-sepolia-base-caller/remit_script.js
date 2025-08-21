@@ -290,6 +290,9 @@ export default {
 
     async function desmond(recursionDepth = 0) {
       try {
+        // Generate unique execution ID for each recursive call
+        const recursiveExecutionId = `${executionId}_recursion_${recursionDepth}`;
+        
         const url = `${env.ALCHEMY_URL_SEPOLIA_BASE}${env.ALCHEMY_API_KEY}`;
         const chainId = parseInt(env.CHAIN_ID, 10);
 
@@ -302,7 +305,7 @@ export default {
         if (recursionDepth >= MAX_RECURSION_DEPTH) {
           console.log(`Max recursion depth (${MAX_RECURSION_DEPTH}) reached`);
           await logToDatabase({
-            execution_id: executionId,
+            execution_id: recursiveExecutionId,
             timestamp: new Date().toISOString(),
             chain_name: 'sepolia',
             precheck_passed: true,
@@ -392,7 +395,7 @@ export default {
 
         // Log to database
         const executionLogId = await logToDatabase({
-          execution_id: executionId,
+          execution_id: recursiveExecutionId,
           timestamp: new Date().toISOString(),
           chain_name: 'sepolia',
           precheck_passed: true,
@@ -422,7 +425,7 @@ export default {
       } catch (error) {
         console.error('Error:', error.message);
         await logToDatabase({
-          execution_id: executionId,
+          execution_id: recursiveExecutionId,
           timestamp: new Date().toISOString(),
           chain_name: 'sepolia',
           precheck_passed: true,
