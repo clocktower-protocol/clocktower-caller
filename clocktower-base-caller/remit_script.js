@@ -128,6 +128,7 @@ export default {
         const currentDay = Math.floor(currentTime / 86400);
         console.log(`PreCheck - Current UTC time: ${currentTime}`);
         console.log(`PreCheck - Current day: ${currentDay}`);
+        console.log(`PreCheck - Current UTC date: ${new Date().toISOString()}`);
 
         // Check nextUncheckedDay
         const nextUncheckedDay = await publicClient.readContract({
@@ -137,11 +138,13 @@ export default {
         });
         console.log(`PreCheck - Next unchecked day: ${nextUncheckedDay}`);
 
-        // If the script has already been called for the day, return false
+        // If current day is less than next unchecked day, we're up to date and don't need to proceed
         if(currentDay < nextUncheckedDay) {
-          console.log(`PreCheck - Script has already been called for the day`);
+          console.log(`PreCheck - Up to date: current day (${currentDay}) < next unchecked day (${nextUncheckedDay})`);
           return false;
         }
+        
+        console.log(`PreCheck - Need to check days from ${nextUncheckedDay} to ${currentDay}`);
         
         const shouldProceed = await checksubs(nextUncheckedDay);
         console.log(`PreCheck - Should proceed: ${shouldProceed}`);
@@ -199,7 +202,10 @@ export default {
           transport: http(url),
         });
 
-        const currentDay = Math.floor(Date.now() / 1000 / 86400);
+        const currentTime = Math.floor(Date.now() / 1000);
+        const currentDay = Math.floor(currentTime / 86400);
+        console.log(`Checksubs - Current UTC time: ${currentTime}`);
+        console.log(`Checksubs - Current day: ${currentDay}`);
         
         // Convert BigInt to number for comparison
         const nextUncheckedDayNum = Number(nextUncheckedDay);
@@ -224,38 +230,45 @@ export default {
           
           console.log(`Day ${i}: ${checkDay.format('YYYY-MM-DD')}, Day of quarter: ${dayOfQuarter}`);
 
-          // Validate day limits
-          if (dayOfMonth > 28) {
-            console.log(`Day of month (${dayOfMonth}) exceeds limit of 28`);
-            return false;
-          }
-          if (dayOfQuarter <= 0 || dayOfQuarter > 90) {
-            console.log(`Day of quarter (${dayOfQuarter}) is invalid or exceeds limit of 90`);
-            return false;
-          }
-          if (dayOfYear <= 0 || dayOfYear > 365) {
-            console.log(`Day of year (${dayOfYear}) is invalid or exceeds limit of 365`);
-            return false;
-          }
-
           // Loop through frequencies 0-3
           for (let frequency = 0; frequency <= 3; frequency++) {
             let dueDay;
+            let shouldSkipFrequency = false;
             
-            // Map frequency to appropriate day type
+            // Map frequency to appropriate day type and validate
             switch (frequency) {
               case 0: // Weekly
                 dueDay = dayOfWeek;
                 break;
               case 1: // Monthly
-                dueDay = dayOfMonth;
+                if (dayOfMonth > 28) {
+                  console.log(`Day of month (${dayOfMonth}) exceeds limit of 28, skipping monthly frequency`);
+                  shouldSkipFrequency = true;
+                } else {
+                  dueDay = dayOfMonth;
+                }
                 break;
               case 2: // Quarterly
-                dueDay = dayOfQuarter;
+                if (dayOfQuarter <= 0 || dayOfQuarter > 90) {
+                  console.log(`Day of quarter (${dayOfQuarter}) is invalid or exceeds limit of 90, skipping quarterly frequency`);
+                  shouldSkipFrequency = true;
+                } else {
+                  dueDay = dayOfQuarter;
+                }
                 break;
               case 3: // Yearly
-                dueDay = dayOfYear;
+                if (dayOfYear <= 0 || dayOfYear > 365) {
+                  console.log(`Day of year (${dayOfYear}) is invalid or exceeds limit of 365, skipping yearly frequency`);
+                  shouldSkipFrequency = true;
+                } else {
+                  dueDay = dayOfYear;
+                }
                 break;
+            }
+            
+            // Skip this frequency if validation failed
+            if (shouldSkipFrequency) {
+              continue;
             }
             
             console.log(`Checking frequency ${frequency} (${frequency === 0 ? 'weekly' : frequency === 1 ? 'monthly' : frequency === 2 ? 'quarterly' : 'yearly'}) for dueDay ${dueDay}`);
