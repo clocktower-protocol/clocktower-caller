@@ -447,11 +447,12 @@ export default {
     }
 
     // Run preCheck first, then desmond if preCheck passes
-    const shouldProceed = await preCheck();
-    console.log(`shouldProceed: ${shouldProceed}`);
+    // TEMPORARILY DISABLED: const shouldProceed = await preCheck();
+    const shouldProceed = true; // Bypass preCheck temporarily
+    console.log(`shouldProceed: ${shouldProceed} (preCheck bypassed)`);
     if (shouldProceed) {
       await desmond();
-      console.log('PreCheck passed, executing desmond');
+      console.log('PreCheck bypassed, executing desmond');
     } else {
       console.log('PreCheck failed, skipping desmond execution');
     }
