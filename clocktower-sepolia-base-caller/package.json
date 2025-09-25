@@ -11,6 +11,7 @@
  "dependencies": {
   "dayjs": "^1.11.13",
   "dotenv": "^16.5.0",
+  "resend": "^3.2.0",
   "viem": "^2.21.1"
  },
  "devDependencies": {

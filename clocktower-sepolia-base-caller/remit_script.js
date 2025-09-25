@@ -2,6 +2,7 @@ import { createPublicClient, createWalletClient, http, formatEther, formatUnits 
 import { privateKeyToAccount } from 'viem/accounts';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
+import { Resend } from 'resend';
 dayjs.extend(utc);
 
 // Inline ABI (only includes remit function and nextUncheckedDay function)
@@ -108,6 +109,59 @@ export default {
         `).bind(executionLogId, token.id, balanceBefore, balanceAfter).run();
       } catch (error) {
         console.error('Token balance logging error:', error);
+      }
+    }
+
+    async function sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, balanceBeforeUsdc, balanceAfterUsdc, recursionDepth) {
+      try {
+        // Only send email if email configuration is available
+        if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
+          console.log('Email configuration not available, skipping email notification');
+          return;
+        }
+
+        const resend = new Resend(env.RESEND_API_KEY);
+        
+        const subject = `✅ Clocktower Remit Success - Sepolia Base Chain`;
+        const htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #22c55e;">🎉 Clocktower Remit Transaction Successful!</h2>
+            
+            <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="color: #0369a1; margin-top: 0;">Transaction Details</h3>
+              <p><strong>Chain:</strong> Sepolia Base</p>
+              <p><strong>Transaction Hash:</strong> <a href="https://sepolia.basescan.org/tx/${txHash}" target="_blank" style="color: #0369a1;">${txHash}</a></p>
+              <p><strong>Recursion Depth:</strong> ${recursionDepth}</p>
+              <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+            </div>
+            
+            <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="color: #166534; margin-top: 0;">Balance Changes</h3>
+              <p><strong>ETH Balance:</strong> ${balanceBeforeEth} → ${balanceAfterEth}</p>
+              <p><strong>USDC Balance:</strong> ${balanceBeforeUsdc} → ${balanceAfterUsdc}</p>
+            </div>
+            
+            <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0; color: #92400e;"><strong>Note:</strong> This email was sent automatically when the remit transaction succeeded and was not reverted.</p>
+            </div>
+            
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+            <p style="color: #6b7280; font-size: 14px; text-align: center;">
+              Clocktower Caller - Sepolia Base Chain Monitoring
+            </p>
+          </div>
+        `;
+
+        const result = await resend.emails.send({
+          from: env.FROM_EMAIL || 'Clocktower Caller <noreply@clocktower-caller.com>',
+          to: [env.NOTIFICATION_EMAIL],
+          subject: subject,
+          html: htmlContent,
+        });
+
+        console.log('Success email sent:', result.data?.id);
+      } catch (error) {
+        console.error('Failed to send success email:', error);
       }
     }
 
@@ -428,6 +482,11 @@ export default {
         // Log token balances
         if (executionLogId) {
           await logTokenBalance(executionLogId, env.USDC_ADDRESS, parseFloat(balanceBeforeUsdc), parseFloat(balanceAfterUsdc));
+        }
+
+        // Send success email notification
+        if (txStatus === 1) {
+          await sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, balanceBeforeUsdc, balanceAfterUsdc, recursionDepth);
         }
 
         // Recursive call on success
