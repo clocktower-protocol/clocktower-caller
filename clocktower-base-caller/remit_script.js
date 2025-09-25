@@ -2,7 +2,6 @@ import { createPublicClient, createWalletClient, http, formatEther, formatUnits 
 import { privateKeyToAccount } from 'viem/accounts';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { Resend } from 'resend';
 dayjs.extend(utc);
 
 
@@ -122,8 +121,6 @@ export default {
           return;
         }
 
-        const resend = new Resend(env.RESEND_API_KEY);
-        
         const subject = `✅ Clocktower Remit Success - Base Chain`;
         const htmlContent = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -154,14 +151,24 @@ export default {
           </div>
         `;
 
-        const result = await resend.emails.send({
-          from: env.FROM_EMAIL || 'Clocktower Caller <noreply@clocktower-caller.com>',
-          to: [env.NOTIFICATION_EMAIL],
-          subject: subject,
-          html: htmlContent,
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: env.FROM_EMAIL || 'onboarding@resend.dev',
+            to: [env.NOTIFICATION_EMAIL],
+            subject: subject,
+            html: htmlContent,
+          }),
         });
 
-        console.log('Success email sent:', result.data?.id);
+        const result = await response.json();
+        console.log('Email response status:', response.status);
+        console.log('Email response:', result);
+        console.log('Success email sent:', result.id);
       } catch (error) {
         console.error('Failed to send success email:', error);
       }
