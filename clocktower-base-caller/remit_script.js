@@ -174,6 +174,71 @@ export default {
       }
     }
 
+    async function sendNoSubscriptionsEmail(currentDay, nextUncheckedDay) {
+      try {
+        // Only send email if email configuration is available
+        if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
+          console.log('Email configuration not available, skipping no subscriptions email notification');
+          return;
+        }
+
+        const subject = `📭 Clocktower No Subscriptions - Base Chain`;
+        const htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #f59e0b;">📭 No Subscriptions Found for Today</h2>
+            
+            <div style="background-color: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="color: #92400e; margin-top: 0;">Daily Check Results</h3>
+              <p><strong>Chain:</strong> Base</p>
+              <p><strong>Current Day:</strong> ${currentDay}</p>
+              <p><strong>Next Unchecked Day:</strong> ${nextUncheckedDay}</p>
+              <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+            </div>
+            
+            <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="color: #0369a1; margin-top: 0;">What This Means</h3>
+              <p>No active subscriptions were found for the current day. This could mean:</p>
+              <ul style="color: #0369a1;">
+                <li>No subscriptions are due today</li>
+                <li>All subscriptions for today have already been processed</li>
+                <li>The system is up to date</li>
+              </ul>
+            </div>
+            
+            <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0; color: #166534;"><strong>Status:</strong> No remit transaction was needed or executed.</p>
+            </div>
+            
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+            <p style="color: #6b7280; font-size: 14px; text-align: center;">
+              Clocktower Caller - Base Chain Monitoring
+            </p>
+          </div>
+        `;
+
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: env.FROM_EMAIL || 'onboarding@resend.dev',
+            to: [env.NOTIFICATION_EMAIL],
+            subject: subject,
+            html: htmlContent,
+          }),
+        });
+
+        const result = await response.json();
+        console.log('No subscriptions email response status:', response.status);
+        console.log('No subscriptions email response:', result);
+        console.log('No subscriptions email sent:', result.id);
+      } catch (error) {
+        console.error('Failed to send no subscriptions email:', error);
+      }
+    }
+
     async function preCheck() {
       try {
         const url = `${env.ALCHEMY_URL_BASE}${env.ALCHEMY_API_KEY}`;
@@ -202,12 +267,17 @@ export default {
         // If current day is less than next unchecked day, we're up to date and don't need to proceed
         if(currentDay < nextUncheckedDay) {
           console.log(`PreCheck - Up to date: current day (${currentDay}) < next unchecked day (${nextUncheckedDay})`);
-          return false;
+          return { shouldProceed: false, currentDay, nextUncheckedDay: Number(nextUncheckedDay) };
+        }
+        
+        // Additional validation: if nextUncheckedDay is significantly in the future, something might be wrong
+        if(nextUncheckedDay > currentDay + 1) {
+          console.log(`PreCheck - Warning: nextUncheckedDay (${nextUncheckedDay}) is more than 1 day ahead of current day (${currentDay})`);
         }
         
         console.log(`PreCheck - Need to check days from ${nextUncheckedDay} to ${currentDay}`);
         
-        const shouldProceed = await checksubs(nextUncheckedDay);
+        const shouldProceed = await checksubs(nextUncheckedDay, currentDay);
         console.log(`PreCheck - Should proceed: ${shouldProceed}`);
         
         // Log precheck results to database
@@ -229,7 +299,7 @@ export default {
           execution_time_ms: Date.now() - startTime
         });
         
-        return shouldProceed;
+        return { shouldProceed, currentDay, nextUncheckedDay: Number(nextUncheckedDay) };
       } catch (error) {
         // Log precheck error to database
         await logToDatabase({
@@ -249,11 +319,11 @@ export default {
           error_message: error.message,
           execution_time_ms: Date.now() - startTime
         });
-        return false;
+        return { shouldProceed: false, currentDay: null, nextUncheckedDay: null };
       }
     }
 
-    async function checksubs(nextUncheckedDay) {
+    async function checksubs(nextUncheckedDay, currentDay) {
       try {
         const url = `${env.ALCHEMY_URL_BASE}${env.ALCHEMY_API_KEY}`;
         const chainId = parseInt(env.CHAIN_ID, 10);
@@ -263,20 +333,46 @@ export default {
           transport: http(url),
         });
 
-        const currentTime = Math.floor(Date.now() / 1000);
-        const currentDay = Math.floor(currentTime / 86400);
-        console.log(`Checksubs - Current UTC time: ${currentTime}`);
-        console.log(`Checksubs - Current day: ${currentDay}`);
+        console.log(`Checksubs - Using current day: ${currentDay}`);
+
+        /*
+              //overrides frequency and dueDay to test
+              const frequency = 0;
+              const dueDay = 4;
+  
+              // Call getIdByTime function
+              const idArray = await publicClient.readContract({
+                address: env.CLOCKTOWER_ADDRESS_BASE,
+                abi,
+                functionName: 'getIdByTime',
+                args: [frequency, dueDay],
+              });
+              
+              console.log(`Frequency ${frequency} returned ${idArray.length} IDs:`, idArray);
+              
+              // Check if any ID in the array is non-zero
+              for (const id of idArray) {
+                if (id !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+                  console.log(`Found non-zero ID: ${id} at frequency ${frequency}`);
+                  return true;
+                }
+              }
+          */
+         //overrides currentDay to test
+        //currentDay = 20362
         
         // Convert BigInt to number for comparison
         const nextUncheckedDayNum = Number(nextUncheckedDay);
 
-        for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
+          for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
+          //for (let i = currentDay; i <= nextUncheckedDayNum; i++) {
+
+          console.log(i)
           const iUnix = i * 86400; // Convert to Unix epoch time
           const checkDay = dayjs.utc(iUnix * 1000); // Convert to dayjs UTC object (multiply by 1000 for milliseconds)
 
-                     //converts day to dueDay by frequency
-           //const now = dayjs.utc();
+          //converts day to dueDay by frequency
+          
            const dayOfWeek = checkDay.day() === 0 ? 7 : checkDay.day(); // Convert Sunday from 0 to 7
            const dayOfMonth = checkDay.date(); // 1-31
           
@@ -334,6 +430,7 @@ export default {
             
             console.log(`Checking frequency ${frequency} (${frequency === 0 ? 'weekly' : frequency === 1 ? 'monthly' : frequency === 2 ? 'quarterly' : 'yearly'}) for dueDay ${dueDay}`);
             
+
             // Call getIdByTime function
             const idArray = await publicClient.readContract({
               address: env.CLOCKTOWER_ADDRESS_BASE,
@@ -526,14 +623,24 @@ export default {
     }
 
     // Run preCheck first, then desmond if preCheck passes
-    // TEMPORARILY DISABLED: const shouldProceed = await preCheck();
-    const shouldProceed = true; // Bypass preCheck temporarily
-    console.log(`shouldProceed: ${shouldProceed} (preCheck bypassed)`);
-    if (shouldProceed) {
+    const preCheckResult = await preCheck();
+    console.log(`shouldProceed: ${preCheckResult.shouldProceed}`);
+    if (preCheckResult.shouldProceed) {
       await desmond();
-      console.log('PreCheck bypassed, executing desmond');
+      console.log('PreCheck passed, executing desmond');
     } else {
       console.log('PreCheck failed, skipping desmond execution');
+      
+      // Send email notification when no subscriptions are found
+      // Use data already retrieved from preCheck to avoid redundant contract call
+      if (preCheckResult.currentDay !== null && preCheckResult.nextUncheckedDay !== null) {
+        await sendNoSubscriptionsEmail(preCheckResult.currentDay, preCheckResult.nextUncheckedDay);
+      } else {
+        // Fallback: calculate current day and use 'Unknown' for nextUncheckedDay
+        const currentTime = Math.floor(Date.now() / 1000);
+        const currentDay = Math.floor(currentTime / 86400);
+        await sendNoSubscriptionsEmail(currentDay, 'Unknown');
+      }
     }
   },
 

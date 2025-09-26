@@ -1,71 +1,86 @@
-# Clocktower Protocol Caller Script
+# Clocktower Protocol Caller Scripts
 
-This repository contains an example caller script for the Clocktower Protocol, designed to execute the `remit` function on the Base Sepolia network.
+This repository contains Cloudflare Worker scripts for the Clocktower Protocol, designed to execute the `remit` function on both Base mainnet and Base Sepolia testnet.
 
 ## Overview
 
-The script is implemented as a Cloudflare Worker that can be scheduled to run periodically. It performs the following key functions:
+The repository contains two separate Cloudflare Worker implementations:
 
-- Checks if the `remit` function has already been called for the current day
-- Executes the `remit` function on the Clocktower Protocol contract
-- Tracks ETH and USDC balances before and after execution
-- Handles transaction failures and provides detailed error reporting
-- Implements recursive execution with a maximum depth limit
-- Logs execution data to analytics
+### 🚀 [Base Mainnet Caller](./clocktower-base-caller/)
+- Executes the `remit` function on Base mainnet
+- Includes email notifications for both success and no-subscription scenarios
+- Full database logging and analytics
+- **[View Documentation →](./clocktower-base-caller/README.md)**
 
-## Features
+### 🧪 [Base Sepolia Testnet Caller](./clocktower-sepolia-base-caller/)
+- Executes the `remit` function on Base Sepolia testnet
+- Includes email notifications for both success and no-subscription scenarios
+- Full database logging and analytics
+- **[View Documentation →](./clocktower-sepolia-base-caller/README.md)**
 
-- Automated daily execution checks
-- Balance tracking for both ETH and USDC
-- Detailed transaction logging and error handling
-- Recursive execution capability
-- Analytics integration for monitoring
-- Support for Base Sepolia testnet
+## Key Features
 
-## Environment Variables
+Both scripts provide:
+- ✅ Automated daily execution checks
+- ✅ Balance tracking for both ETH and USDC
+- ✅ Detailed transaction logging and error handling
+- ✅ Recursive execution capability
+- ✅ Analytics integration for monitoring
+- ✅ Email notifications for successful transactions
+- ✅ Support for both Base mainnet and Base Sepolia testnet
 
-The script requires the following environment variables:
+**Additional Features:**
+- 📧 **Email Notifications**: Both success and no-subscription scenarios
+- 🗄️ **Database Logging**: Comprehensive execution tracking via Cloudflare D1
+- 🔄 **Recursive Execution**: Automatic retry with depth limiting
+- 🛡️ **Error Handling**: Graceful failure handling and detailed logging
 
-- `ALCHEMY_URL_SEPOLIA_BASE`: Alchemy API URL for Base Sepolia
-- `ALCHEMY_API_KEY`: Alchemy API key
-- `CHAIN_ID`: Network chain ID
-- `CLOCKTOWER_ADDRESS_SEPOLIA_BASE`: Clocktower Protocol contract address
-- `CALLER_PRIVATE_KEY`: Private key for the caller account
-- `CALLER_ADDRESS`: Address of the caller account
-- `USDC_ADDRESS`: USDC token contract address
+## Quick Start
 
-## Usage
+1. **Choose your target network:**
+   - For **production**: Use [Base Mainnet Caller](./clocktower-base-caller/)
+   - For **testing**: Use [Base Sepolia Testnet Caller](./clocktower-sepolia-base-caller/)
 
-The script is designed to run as a scheduled Cloudflare Worker. It can be triggered either through the scheduler or via HTTP requests.
+2. **Follow the specific documentation:**
+   - Each worker has its own detailed README with setup instructions
+   - Environment variables and configuration details are documented per worker
 
-### Scheduled Execution
+3. **Deploy to Cloudflare Workers:**
+   - Configure environment variables
+   - Set up D1 database binding
+   - Deploy and schedule the worker
 
-The script runs automatically based on the configured schedule in Cloudflare Workers.
+## Repository Structure
 
-### Manual Execution
+```
+clocktower-caller/
+├── clocktower-base-caller/          # Base mainnet worker
+│   ├── README.md                   # Mainnet-specific documentation
+│   ├── remit_script.js             # Main worker script
+│   ├── package.json                # Dependencies
+│   └── wrangler.jsonc              # Worker configuration
+├── clocktower-sepolia-base-caller/  # Base Sepolia testnet worker
+│   ├── README.md                   # Testnet-specific documentation
+│   ├── remit_script.js             # Main worker script
+│   ├── package.json                # Dependencies
+│   ├── wrangler.jsonc              # Worker configuration
+│   ├── checkWalletbalance.js       # Utility scripts
+│   ├── createWallet.js
+│   └── schema.sql                  # Database schema
+├── database-schema.md              # Database documentation
+└── README.md                       # This overview file
+```
 
-You can trigger the script manually by sending a GET request to the worker's endpoint.
+## Documentation
 
-## Error Handling
-
-The script includes comprehensive error handling:
-- Transaction failure detection
-- Revert reason extraction
-- Balance tracking
-- Analytics logging
-
-## Analytics
-
-Execution data is logged to Cloudflare Analytics, including:
-- Transaction status
-- Balance changes
-- Error messages
-- Execution depth
-- Chain information
+- **[Base Mainnet Caller Documentation](./clocktower-base-caller/README.md)**
+- **[Base Sepolia Testnet Caller Documentation](./clocktower-sepolia-base-caller/README.md)**
+- **[Database Schema Documentation](./database-schema.md)**
 
 ## Security
 
 - Private keys should be stored securely in environment variables
 - Maximum recursion depth is limited to prevent infinite loops
 - Transaction gas limits are set appropriately
+- Email notifications are optional and gracefully handle failures
 
