@@ -239,7 +239,7 @@ export default {
       }
     }
 
-    async function preCheck() {
+    async function preCheck(recursiveExecutionId = null, recursionDepth = 0) {
       try {
         const url = `${env.ALCHEMY_URL_BASE}${env.ALCHEMY_API_KEY}`;
         const chainId = parseInt(env.CHAIN_ID, 10);
@@ -282,7 +282,7 @@ export default {
         
         // Log precheck results to database
         await logToDatabase({
-          execution_id: executionId,
+          execution_id: recursiveExecutionId || executionId,
           timestamp: new Date().toISOString(),
           chain_name: 'base',
           precheck_passed: true,
@@ -294,7 +294,7 @@ export default {
           revert_reason: null,
           balance_before_eth: null,
           balance_after_eth: null,
-          recursion_depth: 0,
+          recursion_depth: recursionDepth,
           error_message: null,
           execution_time_ms: Date.now() - startTime
         });
@@ -303,7 +303,7 @@ export default {
       } catch (error) {
         // Log precheck error to database
         await logToDatabase({
-          execution_id: executionId,
+          execution_id: recursiveExecutionId || executionId,
           timestamp: new Date().toISOString(),
           chain_name: 'base',
           precheck_passed: false,
@@ -315,7 +315,7 @@ export default {
           revert_reason: null,
           balance_before_eth: null,
           balance_after_eth: null,
-          recursion_depth: 0,
+          recursion_depth: recursionDepth,
           error_message: error.message,
           execution_time_ms: Date.now() - startTime
         });
@@ -595,9 +595,17 @@ export default {
           await sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, balanceBeforeUsdc, balanceAfterUsdc, recursionDepth);
         }
 
-        // Recursive call on success
+        // Recursive call on success - but first run preCheck to see if there's still work to do
         if (txStatus === 1) {
-          await desmond(recursionDepth + 1);
+          console.log(`Running preCheck before recursive call...`);
+          const preCheckResult = await preCheck(recursiveExecutionId, recursionDepth);
+          
+          if (preCheckResult.shouldProceed) {
+            console.log(`PreCheck passed, recursing...`);
+            await desmond(recursionDepth + 1);
+          } else {
+            console.log(`PreCheck failed, stopping recursion - no more work needed`);
+          }
         }
 
       } catch (error) {
