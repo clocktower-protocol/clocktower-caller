@@ -156,7 +156,7 @@ export default {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: env.FROM_EMAIL || 'onboarding@resend.dev',
+            from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
             to: [env.NOTIFICATION_EMAIL],
             subject: subject,
             html: htmlContent,
@@ -221,7 +221,7 @@ export default {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: env.FROM_EMAIL || 'onboarding@resend.dev',
+            from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
             to: [env.NOTIFICATION_EMAIL],
             subject: subject,
             html: htmlContent,
