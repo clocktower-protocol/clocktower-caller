@@ -44,7 +44,7 @@ The script requires the following environment variables:
 ### Email Notifications (Optional)
 - `RESEND_API_KEY`: Resend API key for sending email notifications
 - `NOTIFICATION_EMAIL`: Email address to receive notifications
-- `FROM_EMAIL`: Sender email address (defaults to 'onboarding@resend.dev' if not provided)
+- `SENDER_ADDRESS`: Sender email address (defaults to 'onboarding@resend.dev' if not provided)
 
 ## Usage
 
@@ -79,7 +79,7 @@ When no active subscriptions are found for the current day, an email is sent con
 Email notifications are optional and will be skipped if the required environment variables are not configured:
 - `RESEND_API_KEY`: Required for sending emails
 - `NOTIFICATION_EMAIL`: Required for receiving notifications
-- `FROM_EMAIL`: Optional, defaults to 'onboarding@resend.dev'
+- `SENDER_ADDRESS`: Optional, defaults to 'onboarding@resend.dev'
 
 The email system includes graceful error handling - if email sending fails, the script continues execution normally and logs the error.
 
