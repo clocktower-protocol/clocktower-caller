@@ -30,6 +30,13 @@ const abi = [
     outputs: [{ type: 'bytes32[]' }],
     stateMutability: 'view',
   },
+  {
+    name: 'maxRemits',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
 ];
 
 // ERC20 ABI for USDC balance checks
@@ -429,7 +436,104 @@ export default {
       }
     }
 
-    async function desmond(recursionDepth = 0) {
+    async function countTotalSubscriptions(nextUncheckedDay, currentDay) {
+      try {
+        const url = `${env.ALCHEMY_URL_SEPOLIA_BASE}${env.ALCHEMY_API_KEY}`;
+        const chainId = parseInt(env.CHAIN_ID, 10);
+
+        const publicClient = createPublicClient({
+          chain: { id: chainId },
+          transport: http(url),
+        });
+
+        console.log(`CountTotalSubscriptions - Using current day: ${currentDay}`);
+
+        let totalCount = 0;
+        const nextUncheckedDayNum = Number(nextUncheckedDay);
+
+        for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
+          const iUnix = i * 86400; // Convert to Unix epoch time
+          const checkDay = dayjs.utc(iUnix * 1000); // Convert to dayjs UTC object (multiply by 1000 for milliseconds)
+
+          //converts day to dueDay by frequency
+          const dayOfWeek = checkDay.day() === 0 ? 7 : checkDay.day(); // Convert Sunday from 0 to 7
+          const dayOfMonth = checkDay.date(); // 1-31
+          
+          // Calculate day of quarter (1-92) - manually find quarter start
+          const month = checkDay.month(); // 0-11
+          const quarter = Math.floor(month / 3); // 0, 1, 2, 3
+          const quarterStartMonth = quarter * 3; // 0, 3, 6, 9
+          const quarterStart = dayjs.utc([checkDay.year(), quarterStartMonth, 1]);
+          const dayOfQuarter = checkDay.diff(quarterStart, 'day') + 1;
+          
+          const dayOfYear = checkDay.diff(checkDay.startOf('year'), 'day') + 1; // 1-366
+          
+          console.log(`Day ${i}: ${checkDay.format('YYYY-MM-DD')}, Day of quarter: ${dayOfQuarter}`);
+
+          // Loop through frequencies 0-3
+          for (let frequency = 0; frequency <= 3; frequency++) {
+            let dueDay;
+            let shouldSkipFrequency = false;
+            
+            // Map frequency to appropriate day type and validate
+            switch (frequency) {
+              case 0: // Weekly
+                dueDay = dayOfWeek;
+                break;
+              case 1: // Monthly
+                if (dayOfMonth > 28) {
+                  shouldSkipFrequency = true;
+                } else {
+                  dueDay = dayOfMonth;
+                }
+                break;
+              case 2: // Quarterly
+                if (dayOfQuarter <= 0 || dayOfQuarter > 90) {
+                  shouldSkipFrequency = true;
+                } else {
+                  dueDay = dayOfQuarter;
+                }
+                break;
+              case 3: // Yearly
+                if (dayOfYear <= 0 || dayOfYear > 365) {
+                  shouldSkipFrequency = true;
+                } else {
+                  dueDay = dayOfYear;
+                }
+                break;
+            }
+            
+            // Skip this frequency if validation failed
+            if (shouldSkipFrequency) {
+              continue;
+            }
+            
+            // Call getIdByTime function
+            const idArray = await publicClient.readContract({
+              address: env.CLOCKTOWER_ADDRESS_SEPOLIA_BASE,
+              abi,
+              functionName: 'getIdByTime',
+              args: [frequency, dueDay],
+            });
+            
+            // Count non-zero IDs (active subscriptions)
+            for (const id of idArray) {
+              if (id !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+                totalCount++;
+              }
+            }
+          }
+        }
+        
+        console.log(`Total subscriptions found: ${totalCount}`);
+        return totalCount;
+      } catch (error) {
+        console.error('CountTotalSubscriptions Error:', error.message);
+        return 0;
+      }
+    }
+
+    async function desmond(recursionDepth = 0, maxAllowedRecursions = MAX_RECURSION_DEPTH) {
       try {
         // Generate unique execution ID for each recursive call
         const recursiveExecutionId = `${executionId}_recursion_${recursionDepth}`;
@@ -442,28 +546,7 @@ export default {
           transport: http(url),
         });
 
-        // If the script has reached the maximum recursion depth, return
-        if (recursionDepth >= MAX_RECURSION_DEPTH) {
-          console.log(`Max recursion depth (${MAX_RECURSION_DEPTH}) reached`);
-          await logToDatabase({
-            execution_id: recursiveExecutionId,
-            timestamp: new Date().toISOString(),
-            chain_name: 'sepolia',
-            precheck_passed: true,
-            current_day: null,
-            next_unchecked_day: null,
-            should_proceed: true,
-            tx_hash: null,
-            tx_status: null,
-            revert_reason: `Max recursion depth (${MAX_RECURSION_DEPTH}) reached`,
-            balance_before_eth: null,
-            balance_after_eth: null,
-            recursion_depth: recursionDepth,
-            error_message: null,
-            execution_time_ms: Date.now() - startTime
-          });
-          return;
-        }
+        // Note: maxAllowedRecursions already accounts for MAX_RECURSION_DEPTH limit
 
         console.log(`Recursion depth: ${recursionDepth + 1}`);
 
@@ -563,16 +646,13 @@ export default {
           await sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, balanceBeforeUsdc, balanceAfterUsdc, recursionDepth);
         }
 
-        // Recursive call on success - but first run preCheck to see if there's still work to do
+        // Recursive call on success - use pre-calculated max allowed recursions
         if (txStatus === 1) {
-          console.log(`Running preCheck before recursive call...`);
-          const preCheckResult = await preCheck(recursiveExecutionId, recursionDepth);
-          
-          if (preCheckResult.shouldProceed) {
-            console.log(`PreCheck passed, recursing...`);
-            await desmond(recursionDepth + 1);
+          if (recursionDepth < maxAllowedRecursions) {
+            console.log(`Recursion ${recursionDepth + 1}/${maxAllowedRecursions}, recursing...`);
+            await desmond(recursionDepth + 1, maxAllowedRecursions);
           } else {
-            console.log(`PreCheck failed, stopping recursion - no more work needed`);
+            console.log(`Reached expected recursion limit (${maxAllowedRecursions}), stopping`);
           }
         }
 
@@ -602,7 +682,35 @@ export default {
     const preCheckResult = await preCheck();
     console.log(`shouldProceed: ${preCheckResult.shouldProceed}`);
     if (preCheckResult.shouldProceed) {
-      await desmond();
+      // Count total subscriptions once at the beginning
+      const totalSubscriptions = await countTotalSubscriptions(
+        preCheckResult.nextUncheckedDay, 
+        preCheckResult.currentDay
+      );
+      
+      // Get maxRemits limit
+      const url = `${env.ALCHEMY_URL_SEPOLIA_BASE}${env.ALCHEMY_API_KEY}`;
+      const chainId = parseInt(env.CHAIN_ID, 10);
+      const publicClient = createPublicClient({
+        chain: { id: chainId },
+        transport: http(url),
+      });
+      
+      const maxRemits = await publicClient.readContract({
+        address: env.CLOCKTOWER_ADDRESS_SEPOLIA_BASE,
+        abi,
+        functionName: 'maxRemits',
+      });
+      
+      // Calculate expected recursions
+      const expectedRecursions = Math.ceil(totalSubscriptions / Number(maxRemits));
+      const maxAllowedRecursions = Math.min(expectedRecursions, MAX_RECURSION_DEPTH);
+      
+      console.log(`Starting with ${totalSubscriptions} subscriptions, maxRemits: ${maxRemits}`);
+      console.log(`Expected recursions: ${expectedRecursions}, max allowed: ${maxAllowedRecursions}`);
+      
+      // Pass the max allowed recursions to desmond
+      await desmond(0, maxAllowedRecursions);
       console.log('PreCheck passed, executing desmond');
     } else {
       console.log('PreCheck failed, skipping desmond execution');
