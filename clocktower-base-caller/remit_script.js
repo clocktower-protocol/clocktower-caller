@@ -680,7 +680,7 @@ export default {
 
         // Recursive call on success - use pre-calculated max allowed recursions
         if (txStatus === 1) {
-          if (recursionDepth < maxAllowedRecursions) {
+          if (recursionDepth + 1 < maxAllowedRecursions) {
             console.log(`Recursion ${recursionDepth + 1}/${maxAllowedRecursions}, recursing...`);
             await desmond(recursionDepth + 1, maxAllowedRecursions);
           } else {
