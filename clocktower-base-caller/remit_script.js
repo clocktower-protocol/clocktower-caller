@@ -2,6 +2,7 @@ import { createPublicClient, createWalletClient, http, formatEther, formatUnits 
 import { privateKeyToAccount } from 'viem/accounts';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
+import { Resend } from 'resend';
 dayjs.extend(utc);
 
 
@@ -128,6 +129,7 @@ export default {
           return;
         }
 
+        const resend = new Resend(env.RESEND_API_KEY);
         const subject = `✅ Clocktower Remit Success - Base Chain`;
         const htmlContent = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -158,26 +160,23 @@ export default {
           </div>
         `;
 
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
-            to: [env.NOTIFICATION_EMAIL],
-            subject: subject,
-            html: htmlContent,
-          }),
+        const { data, error } = await resend.emails.send({
+          from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
+          to: [env.NOTIFICATION_EMAIL],
+          subject: subject,
+          html: htmlContent,
         });
 
-        const result = await response.json();
-        console.log('Email response status:', response.status);
-        console.log('Email response:', result);
-        console.log('Success email sent:', result.id);
+        if (error) {
+          console.error('Email error:', error);
+          throw new Error(`Email error: ${error.message}`);
+        }
+
+        console.log('Success email sent:', data.id);
+        return data;
       } catch (error) {
         console.error('Failed to send success email:', error);
+        throw error;
       }
     }
 
@@ -189,6 +188,7 @@ export default {
           return;
         }
 
+        const resend = new Resend(env.RESEND_API_KEY);
         const subject = `📭 Clocktower No Subscriptions - Base Chain`;
         const htmlContent = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -223,26 +223,23 @@ export default {
           </div>
         `;
 
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
-            to: [env.NOTIFICATION_EMAIL],
-            subject: subject,
-            html: htmlContent,
-          }),
+        const { data, error } = await resend.emails.send({
+          from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
+          to: [env.NOTIFICATION_EMAIL],
+          subject: subject,
+          html: htmlContent,
         });
 
-        const result = await response.json();
-        console.log('No subscriptions email response status:', response.status);
-        console.log('No subscriptions email response:', result);
-        console.log('No subscriptions email sent:', result.id);
+        if (error) {
+          console.error('No subscriptions email error:', error);
+          throw new Error(`Email error: ${error.message}`);
+        }
+
+        console.log('No subscriptions email sent:', data.id);
+        return data;
       } catch (error) {
         console.error('Failed to send no subscriptions email:', error);
+        throw error;
       }
     }
 
