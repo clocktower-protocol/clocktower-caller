@@ -1,0 +1,71 @@
+# =============================================================================
+# CLOCKTOWER CALLER NODE.JS - CRON JOB EXAMPLES
+# =============================================================================
+
+# Add these lines to your crontab (run 'crontab -e' to edit)
+# Make sure to replace /path/to/clocktower-caller-nodejs with your actual path
+
+# =============================================================================
+# DAILY EXECUTION (RECOMMENDED)
+# =============================================================================
+# Run daily at 00:30 UTC (adjust timezone as needed)
+# 30 0 * * * cd /path/to/clocktower-caller-nodejs && /usr/bin/node src/index.js >> logs/cron.log 2>&1
+
+# =============================================================================
+# ALTERNATIVE SCHEDULES
+# =============================================================================
+
+# Every 6 hours
+# 0 */6 * * * cd /path/to/clocktower-caller-nodejs && /usr/bin/node src/index.js >> logs/cron.log 2>&1
+
+# Every 12 hours
+# 0 */12 * * * cd /path/to/clocktower-caller-nodejs && /usr/bin/node src/index.js >> logs/cron.log 2>&1
+
+# Twice daily (morning and evening)
+# 0 6,18 * * * cd /path/to/clocktower-caller-nodejs && /usr/bin/node src/index.js >> logs/cron.log 2>&1
+
+# =============================================================================
+# TESTING SCHEDULES
+# =============================================================================
+
+# Every 5 minutes (for testing - NOT recommended for production)
+# */5 * * * * cd /path/to/clocktower-caller-nodejs && /usr/bin/node src/index.js >> logs/cron.log 2>&1
+
+# Every hour (for testing)
+# 0 * * * * cd /path/to/clocktower-caller-nodejs && /usr/bin/node src/index.js >> logs/cron.log 2>&1
+
+# =============================================================================
+# SETUP INSTRUCTIONS
+# =============================================================================
+
+# 1. Copy the desired schedule line above (without the # comment)
+# 2. Replace /path/to/clocktower-caller-nodejs with your actual project path
+# 3. Replace /usr/bin/node with your Node.js path (run 'which node' to find it)
+# 4. Add the line to your crontab:
+#    crontab -e
+# 5. Save and exit the editor
+# 6. Verify the cron job is added:
+#    crontab -l
+
+# =============================================================================
+# LOGGING NOTES
+# =============================================================================
+
+# The >> logs/cron.log 2>&1 part:
+# - >> appends output to logs/cron.log
+# - 2>&1 redirects stderr to stdout (captures both output and errors)
+# - Make sure the logs/ directory exists and is writable
+
+# To view cron logs:
+# tail -f /path/to/clocktower-caller-nodejs/logs/cron.log
+
+# =============================================================================
+# TROUBLESHOOTING
+# =============================================================================
+
+# If cron jobs aren't running:
+# 1. Check if cron service is running: systemctl status cron
+# 2. Check cron logs: journalctl -u cron
+# 3. Verify the path to node: which node
+# 4. Test the command manually: cd /path/to/clocktower-caller-nodejs && node src/index.js
+# 5. Check file permissions: chmod +x src/index.js
