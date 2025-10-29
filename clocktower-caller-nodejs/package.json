@@ -1,0 +1,40 @@
+{
+  "name": "clocktower-caller-nodejs",
+  "version": "1.0.0",
+  "description": "Unified Node.js multi-chain Clocktower caller application",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "check-balance": "node src/scripts/checkWalletBalance.js",
+    "create-wallet": "node src/scripts/createWallet.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "clocktower",
+    "blockchain",
+    "ethereum",
+    "base",
+    "crypto",
+    "defi"
+  ],
+  "author": "Clocktower Finance",
+  "license": "MIT",
+  "dependencies": {
+    "dayjs": "^1.11.13",
+    "dotenv": "^17.0.0",
+    "resend": "^6.3.0",
+    "viem": "^2.21.1",
+    "better-sqlite3": "^9.2.2",
+    "pg": "^8.11.3",
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
