@@ -8,7 +8,7 @@
 import { createPublicClient, createWalletClient, http, formatEther, formatUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
+import utc from 'dayjs/plugin/utc.js';
 import { ChainConfigService } from '../config/chainConfig.js';
 import { DatabaseService } from './database.js';
 import { EmailService } from './email.js';

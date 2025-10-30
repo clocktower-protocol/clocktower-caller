@@ -120,20 +120,26 @@ export class DatabaseService {
       const schemaPath = join(__dirname, '../../database/schema.sql');
       const schema = readFileSync(schemaPath, 'utf8');
       
-      // Split schema into individual statements
-      const statements = schema
-        .split(';')
-        .map(stmt => stmt.trim())
-        .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
-
       if (this.config.isSQLite()) {
-        // Execute statements for SQLite
-        for (const statement of statements) {
-          if (statement.trim()) {
-            this.db.exec(statement);
-          }
+        // If core tables already exist, skip schema application (idempotent init)
+        const existing = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('execution_logs','tokens','token_balances')").all();
+        if (existing && existing.length >= 2) {
+          this.logger.info('Database schema already present, skipping initialization');
+        } else {
+          this.db.exec(schema);
         }
       } else if (this.config.isPostgreSQL()) {
+        // Remove SQL comments, then split into statements for PostgreSQL
+        const cleaned = schema
+          .split('\n')
+          .filter(line => !line.trim().startsWith('--'))
+          .join('\n');
+
+        const statements = cleaned
+          .split(';')
+          .map(stmt => stmt.trim())
+          .filter(stmt => stmt.length > 0);
+
         // Execute statements for PostgreSQL
         const client = await this.db.connect();
         try {
