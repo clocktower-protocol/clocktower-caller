@@ -195,21 +195,26 @@ export class EmailService {
     try {
       const successful = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
+      const executed = results.filter(r => (r.txCount || 0) > 0).length;
+      const noSubs = results.filter(r => (r.txCount || 0) === 0 && r.status === 'no_subscriptions').length;
       const total = results.length;
 
-      const subject = `📊 Clocktower Multi-Chain Summary - ${successful}/${total} Successful`;
+      const subject = `📊 Clocktower Summary - ${executed} executed, ${noSubs} none, ${failed} failed`;
       
       // Create results table
       const resultsTable = results.map(result => {
-        const status = result.success ? '✅' : '❌';
-        const statusText = result.success ? 'Success' : 'Failed';
-        const errorText = result.error ? ` (${result.error})` : '';
-        
+        const statusIcon = !result.success ? '❌' : (result.txCount || 0) > 0 ? '✅' : 'ℹ️';
+        const outcome = !result.success
+          ? `Failed${result.error ? ` (${result.error})` : ''}`
+          : (result.txCount || 0) > 0
+            ? `Executed ${result.txCount} tx(s)`
+            : 'No subscriptions';
+
         return `
           <tr style="border-bottom: 1px solid #e5e7eb;">
-            <td style="padding: 8px; text-align: center;">${status}</td>
+            <td style="padding: 8px; text-align: center;">${statusIcon}</td>
             <td style="padding: 8px;">${result.chain}</td>
-            <td style="padding: 8px;">${statusText}${errorText}</td>
+            <td style="padding: 8px;">${outcome}</td>
           </tr>
         `;
       }).join('');
@@ -221,9 +226,9 @@ export class EmailService {
           <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="color: #0369a1; margin-top: 0;">Overall Results</h3>
             <p><strong>Total Chains:</strong> ${total}</p>
-            <p><strong>Successful:</strong> ${successful} ✅</p>
-            <p><strong>Failed:</strong> ${failed} ❌</p>
-            <p><strong>Success Rate:</strong> ${total > 0 ? Math.round((successful / total) * 100) : 0}%</p>
+            <p><strong>Executed Transactions:</strong> ${executed}</p>
+            <p><strong>No Subscriptions:</strong> ${noSubs}</p>
+            <p><strong>Failed:</strong> ${failed}</p>
             <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
           </div>
           

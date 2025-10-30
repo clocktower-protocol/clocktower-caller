@@ -21,7 +21,7 @@ class ClocktowerCaller {
   constructor() {
     this.logger = new Logger('ClocktowerCaller');
     this.database = new DatabaseService();
-    this.clocktower = new ClocktowerService();
+    this.clocktower = new ClocktowerService(this.database);
     this.email = new EmailService();
     this.isInitialized = false;
   }
@@ -102,28 +102,30 @@ class ClocktowerCaller {
       // Execute remit for all active chains
       const results = await this.clocktower.executeRemitForAllChains();
 
-      // Calculate summary
-      const successful = results.filter(r => r.success).length;
-      const failed = results.filter(r => !r.success).length;
+      // Calculate summary using detailed statuses
+      const executed = results.filter(r => r.status === 'executed' && (r.txCount || 0) > 0).length;
+      const noSubs = results.filter(r => r.status === 'no_subscriptions').length;
+      const failed = results.filter(r => r.status === 'failed' || (!r.success && r.status !== 'no_subscriptions')).length;
       const total = results.length;
       const executionTime = Date.now() - startTime;
 
       const summary = {
         executionId,
         totalChains: total,
-        successful,
+        successful: executed,
         failed,
-        successRate: total > 0 ? Math.round((successful / total) * 100) : 0,
+        noSubscriptions: noSubs,
+        successRate: total > 0 ? Math.round((executed / total) * 100) : 0,
         executionTimeMs: executionTime,
         results
       };
 
-      this.logger.info(`Execution completed: ${successful}/${total} successful (${summary.successRate}%)`);
+      this.logger.info(`Execution completed: ${executed}/${total} executed, ${noSubs} none, ${failed} failed`);
       this.logger.info(`Total execution time: ${executionTime}ms`);
 
       // Log failed chains
       if (failed > 0) {
-        const failedChains = results.filter(r => !r.success).map(r => r.chain);
+        const failedChains = results.filter(r => r.status === 'failed' || (!r.success && r.status !== 'no_subscriptions')).map(r => r.chain);
         this.logger.warn(`Failed chains: ${failedChains.join(', ')}`);
       }
 
@@ -195,7 +197,8 @@ async function main() {
     console.log('='.repeat(60));
     console.log(`Execution ID: ${summary.executionId}`);
     console.log(`Total Chains: ${summary.totalChains}`);
-    console.log(`Successful: ${summary.successful} ✅`);
+    console.log(`Successful (executed): ${summary.successful} ✅`);
+    console.log(`No Subscriptions: ${summary.noSubscriptions}`);
     console.log(`Failed: ${summary.failed} ❌`);
     console.log(`Success Rate: ${summary.successRate}%`);
     console.log(`Execution Time: ${summary.executionTimeMs}ms`);
