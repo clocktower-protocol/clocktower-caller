@@ -123,7 +123,7 @@ export class DatabaseService {
       if (this.config.isSQLite()) {
         // If core tables already exist, skip schema application (idempotent init)
         const existing = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('execution_logs','tokens','token_balances')").all();
-        if (existing && existing.length >= 2) {
+        if (existing && existing.length === 3) {
           this.logger.info('Database schema already present, skipping initialization');
         } else {
           this.db.exec(schema);

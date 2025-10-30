@@ -31,9 +31,9 @@ import {
 dayjs.extend(utc);
 
 export class ClocktowerService {
-  constructor() {
+  constructor(databaseService = null) {
     this.chainConfig = new ChainConfigService();
-    this.database = new DatabaseService();
+    this.database = databaseService || new DatabaseService();
     this.email = new EmailService();
     this.logger = new Logger('ClocktowerService');
     this.maxRecursionDepth = parseInt(process.env.MAX_RECURSION_DEPTH, 10) || MAX_RECURSION_DEPTH;
@@ -55,7 +55,13 @@ export class ClocktowerService {
       try {
         this.logger.chain(chain.name, `Starting execution for ${chain.displayName}`);
         const result = await this.executeRemitForChain(chain);
-        results.push({ chain: chain.name, success: true, result });
+        results.push({ 
+          chain: chain.name, 
+          success: result.success, 
+          status: result.status || (result.success ? 'unknown' : 'failed'),
+          txCount: result.txCount || 0,
+          error: result.error
+        });
         this.logger.chain(chain.name, `Completed execution for ${chain.displayName}`);
       } catch (error) {
         this.logger.chain(chain.name, `Failed execution for ${chain.displayName}`, error);
@@ -90,15 +96,19 @@ export class ClocktowerService {
       
       if (!preCheckResult.shouldProceed) {
         this.logger.chain(chainConfig.name, 'No subscriptions found, skipping execution');
-        
-        // Send no subscriptions email
-        await this.email.sendNoSubscriptionsEmail(
-          chainConfig.displayName,
-          preCheckResult.currentDay, 
-          preCheckResult.nextUncheckedDay
-        );
-        
-        return { success: true, message: 'No subscriptions found' };
+
+        // Best-effort notification; do NOT fail the chain if email fails
+        try {
+          await this.email.sendNoSubscriptionsEmail(
+            chainConfig.displayName,
+            preCheckResult.currentDay,
+            preCheckResult.nextUncheckedDay
+          );
+        } catch (notifyError) {
+          this.logger.chain(chainConfig.name, 'No-subscriptions email failed', notifyError);
+        }
+
+        return { success: true, status: 'no_subscriptions', txCount: 0 };
       }
 
       // Count total subscriptions
@@ -119,13 +129,13 @@ export class ClocktowerService {
       this.logger.chain(chainConfig.name, `Expected recursions: ${expectedRecursions}, max allowed: ${maxAllowedRecursions}`);
 
       // Execute remit transactions
-      await this.desmond(chainConfig, executionId, startTime, 0, maxAllowedRecursions);
+      const txCount = await this.desmond(chainConfig, executionId, startTime, 0, maxAllowedRecursions);
       
       this.logger.chain(chainConfig.name, `Execution completed successfully: ${executionId}`);
-      return { success: true, message: 'Remit execution completed' };
+      return { success: true, status: txCount > 0 ? 'executed' : 'no_subscriptions', txCount };
     } catch (error) {
       this.logger.chain(chainConfig.name, `Execution failed: ${executionId}`, error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, status: 'failed', txCount: 0 };
     }
   }
 
@@ -178,8 +188,9 @@ export class ClocktowerService {
       const shouldProceed = await this.checksubs(chainConfig, nextUncheckedDay, currentDay);
       this.logger.chain(chainConfig.name, `PreCheck - Should proceed: ${shouldProceed}`);
       
-      // Log precheck results to database
-      await this.database.logExecution({
+      // Log precheck results to database (best-effort)
+      try {
+        await this.database.logExecution({
         execution_id: executionId,
         timestamp: new Date().toISOString(),
         chain_name: chainConfig.name,
@@ -199,14 +210,18 @@ export class ClocktowerService {
         error_message: null,
         error_stack: null,
         execution_time_ms: Date.now() - startTime
-      });
+        });
+      } catch (logError) {
+        this.logger.chain(chainConfig.name, 'PreCheck logging skipped (DB not ready or insert failed)', logError);
+      }
       
       return { shouldProceed, currentDay, nextUncheckedDay: Number(nextUncheckedDay) };
     } catch (error) {
       this.logger.chain(chainConfig.name, 'PreCheck failed', error);
       
-      // Log precheck error to database
-      await this.database.logExecution({
+      // Log precheck error to database (best-effort)
+      try {
+        await this.database.logExecution({
         execution_id: executionId,
         timestamp: new Date().toISOString(),
         chain_name: chainConfig.name,
@@ -226,7 +241,10 @@ export class ClocktowerService {
         error_message: error.message,
         error_stack: error.stack,
         execution_time_ms: Date.now() - startTime
-      });
+        });
+      } catch (logError) {
+        this.logger.chain(chainConfig.name, 'PreCheck error logging skipped (DB not ready or insert failed)', logError);
+      }
       
       return { shouldProceed: false, currentDay: null, nextUncheckedDay: null };
     }
@@ -464,8 +482,10 @@ export class ClocktowerService {
       const balanceAfterUsdc = formatUnits(usdcBalance2, 6);
       this.logger.balance(process.env.CALLER_ADDRESS, `USDC Balance After: ${balanceAfterUsdc}`);
 
-      // Log to database
-      const executionLogId = await this.database.logExecution({
+      // Log to database (best-effort)
+      let executionLogId = null;
+      try {
+        executionLogId = await this.database.logExecution({
         execution_id: recursiveExecutionId,
         timestamp: new Date().toISOString(),
         chain_name: chainConfig.name,
@@ -485,7 +505,10 @@ export class ClocktowerService {
         error_message: null,
         error_stack: null,
         execution_time_ms: Date.now() - startTime
-      });
+        });
+      } catch (logError) {
+        this.logger.chain(chainConfig.name, 'Desmond logging skipped (DB not ready or insert failed)', logError);
+      }
 
       // Log token balances
       if (executionLogId) {
@@ -511,20 +534,26 @@ export class ClocktowerService {
         );
       }
 
+      let successfulTxs = txStatus === 1 ? 1 : 0;
+
       // Recursive call on success
       if (txStatus === 1) {
         if (recursionDepth + 1 < maxAllowedRecursions) {
           this.logger.chain(chainConfig.name, `Recursion ${recursionDepth + 1}/${maxAllowedRecursions}, recursing...`);
-          await this.desmond(chainConfig, executionId, startTime, recursionDepth + 1, maxAllowedRecursions);
+          const more = await this.desmond(chainConfig, executionId, startTime, recursionDepth + 1, maxAllowedRecursions);
+          successfulTxs += more;
         } else {
           this.logger.chain(chainConfig.name, `Reached expected recursion limit (${maxAllowedRecursions}), stopping`);
         }
       }
 
+      return successfulTxs;
+
     } catch (error) {
       this.logger.chain(chainConfig.name, 'Desmond Error', error);
       
-      await this.database.logExecution({
+      try {
+        await this.database.logExecution({
         execution_id: `${executionId}_recursion_${recursionDepth}`,
         timestamp: new Date().toISOString(),
         chain_name: chainConfig.name,
@@ -544,7 +573,11 @@ export class ClocktowerService {
         error_message: error.message,
         error_stack: error.stack,
         execution_time_ms: Date.now() - startTime
-      });
+        });
+      } catch (logError) {
+        this.logger.chain(chainConfig.name, 'Desmond error logging skipped (DB not ready or insert failed)', logError);
+      }
+      return 0;
     }
   }
 }
