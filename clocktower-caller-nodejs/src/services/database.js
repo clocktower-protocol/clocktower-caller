@@ -180,34 +180,55 @@ export class DatabaseService {
           execution_time_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-
-      const params = [
-        data.execution_id,
-        data.timestamp,
-        data.chain_name,
-        data.chain_display_name,
-        data.precheck_passed,
-        data.current_day,
-        data.next_unchecked_day,
-        data.should_proceed,
-        data.tx_hash,
-        data.tx_status,
-        data.revert_reason,
-        data.gas_used,
-        data.balance_before_eth,
-        data.balance_after_eth,
-        data.recursion_depth,
-        data.max_recursion_reached,
-        data.error_message,
-        data.error_stack,
-        data.execution_time_ms
-      ];
+      const boolToSqlite = (v) => (v === null || v === undefined) ? null : (v ? 1 : 0);
 
       if (this.config.isSQLite()) {
+        const params = [
+          data.execution_id,
+          data.timestamp,
+          data.chain_name,
+          data.chain_display_name,
+          boolToSqlite(data.precheck_passed),
+          data.current_day,
+          data.next_unchecked_day,
+          (data.should_proceed === null || data.should_proceed === undefined) ? null : boolToSqlite(data.should_proceed),
+          data.tx_hash,
+          data.tx_status,
+          data.revert_reason,
+          data.gas_used,
+          data.balance_before_eth,
+          data.balance_after_eth,
+          data.recursion_depth,
+          boolToSqlite(data.max_recursion_reached),
+          data.error_message,
+          data.error_stack,
+          data.execution_time_ms
+        ];
         const stmt = this.db.prepare(sql);
         const result = stmt.run(...params);
         return result.lastInsertRowid;
       } else if (this.config.isPostgreSQL()) {
+        const params = [
+          data.execution_id,
+          data.timestamp,
+          data.chain_name,
+          data.chain_display_name,
+          data.precheck_passed,
+          data.current_day,
+          data.next_unchecked_day,
+          data.should_proceed,
+          data.tx_hash,
+          data.tx_status,
+          data.revert_reason,
+          data.gas_used,
+          data.balance_before_eth,
+          data.balance_after_eth,
+          data.recursion_depth,
+          data.max_recursion_reached,
+          data.error_message,
+          data.error_stack,
+          data.execution_time_ms
+        ];
         const client = await this.db.connect();
         try {
           const result = await client.query(sql, params);
@@ -310,20 +331,27 @@ export class DatabaseService {
       INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name, is_active)
       VALUES (?, ?, ?, ?, ?, ?)
     `;
-    const params = [
-      tokenData.token_address,
-      tokenData.token_symbol,
-      tokenData.token_name,
-      tokenData.decimals,
-      tokenData.chain_name,
-      tokenData.is_active !== false
-    ];
-
     if (this.config.isSQLite()) {
+      const params = [
+        tokenData.token_address,
+        tokenData.token_symbol,
+        tokenData.token_name,
+        tokenData.decimals,
+        tokenData.chain_name,
+        (tokenData.is_active === undefined || tokenData.is_active === null) ? 1 : (tokenData.is_active ? 1 : 0)
+      ];
       const stmt = this.db.prepare(sql);
       const result = stmt.run(...params);
       return { id: result.lastInsertRowid, ...tokenData };
     } else if (this.config.isPostgreSQL()) {
+      const params = [
+        tokenData.token_address,
+        tokenData.token_symbol,
+        tokenData.token_name,
+        tokenData.decimals,
+        tokenData.chain_name,
+        tokenData.is_active !== false
+      ];
       const client = await this.db.connect();
       try {
         const result = await client.query(sql, params);
