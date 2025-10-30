@@ -22,12 +22,12 @@
   "author": "Clocktower Finance",
   "license": "MIT",
   "dependencies": {
+    "better-sqlite3": "^12.4.1",
     "dayjs": "^1.11.13",
     "dotenv": "^17.0.0",
+    "pg": "^8.11.3",
     "resend": "^6.3.0",
     "viem": "^2.21.1",
-    "better-sqlite3": "^12.4.1",
-    "pg": "^8.11.3",
     "winston": "^3.11.0",
     "winston-daily-rotate-file": "^4.7.1"
   },
