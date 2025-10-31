@@ -13,6 +13,8 @@ import { DatabaseService } from './services/database.js';
 import { EmailService } from './services/email.js';
 import { Logger } from './utils/logger.js';
 import { getRequiredEnv } from './utils/helpers.js';
+import { ChainConfigService } from './config/chainConfig.js';
+import { DatabaseConfigService } from './config/database.js';
 
 // Load environment variables
 config();
@@ -60,6 +62,9 @@ class ClocktowerCaller {
    * @throws {Error} If required variables are missing
    */
   validateEnvironment() {
+    const errors = [];
+
+    // Base required environment variables
     const required = [
       'CALLER_ADDRESS',
       'CALLER_PRIVATE_KEY',
@@ -69,16 +74,89 @@ class ClocktowerCaller {
     const missing = required.filter(key => !process.env[key]);
     
     if (missing.length > 0) {
-      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+      errors.push(`Missing required environment variables: ${missing.join(', ')}`);
     }
 
-    // Validate wallet configuration
-    if (!process.env.CALLER_ADDRESS.match(/^0x[a-fA-F0-9]{40}$/)) {
-      throw new Error('Invalid CALLER_ADDRESS format');
+    // Validate wallet configuration format
+    if (process.env.CALLER_ADDRESS && !process.env.CALLER_ADDRESS.match(/^0x[a-fA-F0-9]{40}$/)) {
+      errors.push('Invalid CALLER_ADDRESS format (must be a valid 40-character hex address starting with 0x)');
     }
 
-    if (!process.env.CALLER_PRIVATE_KEY.match(/^0x[a-fA-F0-9]{64}$/)) {
-      throw new Error('Invalid CALLER_PRIVATE_KEY format');
+    if (process.env.CALLER_PRIVATE_KEY && !process.env.CALLER_PRIVATE_KEY.match(/^0x[a-fA-F0-9]{64}$/)) {
+      errors.push('Invalid CALLER_PRIVATE_KEY format (must be a valid 64-character hex private key starting with 0x)');
+    }
+
+    // Validate chain configurations
+    try {
+      const chainConfig = new ChainConfigService();
+      const activeChains = process.env.ACTIVE_CHAINS?.split(',').map(chain => chain.trim()) || ['base'];
+      
+      for (const chainName of activeChains) {
+        const normalizedName = chainName.toUpperCase().replace('-', '_');
+        const chainRequired = [
+          `ALCHEMY_URL_${normalizedName}`,
+          `CLOCKTOWER_ADDRESS_${normalizedName}`,
+          `CHAIN_ID_${normalizedName}`,
+          `USDC_ADDRESS_${normalizedName}`
+        ];
+
+        const chainMissing = chainRequired.filter(key => !process.env[key]);
+        
+        if (chainMissing.length > 0) {
+          errors.push(`Missing required environment variables for chain '${chainName}': ${chainMissing.join(', ')}`);
+        }
+
+        // Validate chain ID format if provided
+        const chainId = process.env[`CHAIN_ID_${normalizedName}`];
+        if (chainId && (isNaN(parseInt(chainId, 10)) || parseInt(chainId, 10) <= 0)) {
+          errors.push(`Invalid CHAIN_ID_${normalizedName} format (must be a positive integer)`);
+        }
+
+        // Validate contract address formats if provided
+        const clocktowerAddr = process.env[`CLOCKTOWER_ADDRESS_${normalizedName}`];
+        if (clocktowerAddr && !clocktowerAddr.match(/^0x[a-fA-F0-9]{40}$/)) {
+          errors.push(`Invalid CLOCKTOWER_ADDRESS_${normalizedName} format (must be a valid 40-character hex address)`);
+        }
+
+        const usdcAddr = process.env[`USDC_ADDRESS_${normalizedName}`];
+        if (usdcAddr && !usdcAddr.match(/^0x[a-fA-F0-9]{40}$/)) {
+          errors.push(`Invalid USDC_ADDRESS_${normalizedName} format (must be a valid 40-character hex address)`);
+        }
+      }
+
+      // Check if any valid chains are configured
+      const validChains = chainConfig.getAllActiveChains();
+      if (validChains.length === 0) {
+        errors.push('No valid chain configurations found. At least one chain must be properly configured.');
+      }
+    } catch (error) {
+      errors.push(`Failed to validate chain configurations: ${error.message}`);
+    }
+
+    // Validate database configuration
+    try {
+      const dbConfig = new DatabaseConfigService();
+      const validation = dbConfig.validateConfig();
+      
+      if (!validation.valid) {
+        errors.push(...validation.errors);
+      }
+    } catch (error) {
+      errors.push(`Failed to validate database configuration: ${error.message}`);
+    }
+
+    // If any errors found, throw comprehensive error message
+    if (errors.length > 0) {
+      const errorMessage = [
+        'Environment validation failed:',
+        ...errors.map(err => `  - ${err}`),
+        '',
+        'Please check your .env file and ensure all required variables are set correctly.',
+        'See README.md for detailed configuration instructions.'
+      ].join('\n');
+      
+      this.logger.error(errorMessage);
+      throw new Error(errorMessage);
     }
 
     this.logger.info('Environment validation passed');
