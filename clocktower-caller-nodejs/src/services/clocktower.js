@@ -280,11 +280,11 @@ export class ClocktowerService {
           const dueDayInfo = getDueDay(frequency, checkDay);
           
           if (dueDayInfo.shouldSkip) {
-            this.logger.chain(chainConfig.name, `Skipping frequency ${frequency}: ${dueDayInfo.skipReason}`);
+            this.logger.chain(chainConfig.name, `Skipping frequency ${getFrequencyName(frequency)}: ${dueDayInfo.skipReason}`);
             continue;
           }
           
-          this.logger.chain(chainConfig.name, `Checking frequency ${frequency} (${getFrequencyName(frequency)}) for dueDay ${dueDayInfo.dueDay}`);
+          this.logger.chain(chainConfig.name, `Checking frequency ${getFrequencyName(frequency)} for dueDay ${dueDayInfo.dueDay}`);
           
           // Call getIdByTime function
           const idArray = await publicClient.readContract({
@@ -294,12 +294,12 @@ export class ClocktowerService {
             args: [frequency, dueDayInfo.dueDay],
           });
           
-          this.logger.chain(chainConfig.name, `Frequency ${frequency} returned ${idArray.length} IDs`);
+          this.logger.chain(chainConfig.name, `Frequency ${getFrequencyName(frequency)} returned ${idArray.length} IDs`);
           
           // Check if any ID in the array is non-zero
           for (const id of idArray) {
             if (id !== ZERO_HASH) {
-              this.logger.chain(chainConfig.name, `Found non-zero ID: ${id} at frequency ${frequency}`);
+              this.logger.chain(chainConfig.name, `Found non-zero ID: ${id} at frequency ${getFrequencyName(frequency)}`);
               return true;
             }
           }

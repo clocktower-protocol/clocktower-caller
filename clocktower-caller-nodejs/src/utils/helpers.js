@@ -232,7 +232,8 @@ export function getDueDay(frequency, day) {
     
     default:
       shouldSkip = true;
-      skipReason = `Unknown frequency: ${frequency}`;
+      const frequencyName = getFrequencyName(frequency);
+      skipReason = `Unknown frequency: ${frequencyName} (${frequency})`;
   }
 
   return {
