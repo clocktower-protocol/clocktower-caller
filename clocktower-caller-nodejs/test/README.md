@@ -13,8 +13,14 @@ We use [Vitest](https://vitest.dev/) as our testing framework, which provides:
 ## Running Tests
 
 ```bash
-# Run all tests once
+# Run all tests once (unit + integration)
 npm test
+
+# Run only unit tests
+npm test test/config test/services test/utils
+
+# Run only integration tests
+npm test test/integration
 
 # Run tests in watch mode (for development)
 npm run test:watch
@@ -27,14 +33,18 @@ npm run test:coverage
 
 ```
 test/
-├── config/          # Tests for configuration services
+├── config/          # Unit tests for configuration services
 │   ├── chainConfig.test.js
 │   └── database.test.js
-├── services/        # Tests for business logic services
+├── services/        # Unit tests for business logic services
 │   ├── database.test.js
 │   └── email.test.js
-└── utils/           # Tests for utility functions
-    └── helpers.test.js
+├── utils/           # Unit tests for utility functions
+│   └── helpers.test.js
+└── integration/     # Integration tests for end-to-end flows
+    ├── clocktowerCaller.integration.test.js
+    ├── database.integration.test.js
+    └── services.integration.test.js
 ```
 
 ## Test Coverage
@@ -72,6 +82,24 @@ The test suite covers:
   - No subscriptions notifications
   - Summary email notifications
   - Explorer URL generation
+
+### Integration Tests (`integration/`)
+- ✅ ClocktowerCaller integration
+  - Full initialization flow
+  - Execution flow end-to-end
+  - Multi-chain execution
+  - Error handling scenarios
+  - Shutdown procedures
+- ✅ Database integration
+  - Complete execution logging flow
+  - Token balance tracking
+  - Query operations with real data
+  - Recursive execution logging
+- ✅ Services integration
+  - ClocktowerService + DatabaseService interaction
+  - EmailService + ClocktowerService interaction
+  - Multi-chain service coordination
+  - Error propagation across services
 
 ## Writing New Tests
 
@@ -150,13 +178,41 @@ Tests should be run in CI/CD pipelines before merging code. The test suite shoul
 - Use `vi.stubEnv()` to set environment variables in tests
 - Clean up with `vi.unstubAllEnvs()` in `afterEach`
 
+## Integration Tests
+
+Integration tests verify that multiple services work together correctly. They test:
+
+- **End-to-end execution flow**: From initialization through execution to shutdown
+- **Service interactions**: How ClocktowerService, DatabaseService, and EmailService work together
+- **Database operations**: Real database operations with actual SQLite/PostgreSQL
+- **Error propagation**: How errors are handled across service boundaries
+- **Multi-chain coordination**: Execution across multiple blockchain networks
+
+### Integration Test Files
+
+- `clocktowerCaller.integration.test.js`: Tests the main ClocktowerCaller class
+- `database.integration.test.js`: Tests database operations end-to-end
+- `services.integration.test.js`: Tests service interactions
+
+### Running Integration Tests
+
+```bash
+# Run all integration tests
+npm test test/integration
+
+# Run specific integration test file
+npm test test/integration/clocktowerCaller.integration.test.js
+```
+
 ## Coverage Goals
 
 - **Target**: >80% code coverage
 - **Critical paths**: >90% coverage
+- **Integration coverage**: All major execution flows
 - Focus on:
   - Business logic
   - Error handling
   - Edge cases
   - Configuration validation
+  - Service interactions
 
