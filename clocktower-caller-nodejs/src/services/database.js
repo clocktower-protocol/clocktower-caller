@@ -180,29 +180,36 @@ export class DatabaseService {
           execution_time_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      const boolToSqlite = (v) => (v === null || v === undefined) ? null : (v ? 1 : 0);
+      
+      // Helper to convert undefined to null (SQLite requirement)
+      const toNull = (v) => (v === undefined ? null : v);
+      // Helper to convert boolean to SQLite integer (0 or 1)
+      const boolToSqlite = (v) => {
+        if (v === null || v === undefined) return null;
+        return v ? 1 : 0;
+      };
 
       if (this.config.isSQLite()) {
         const params = [
-          data.execution_id,
-          data.timestamp,
-          data.chain_name,
-          data.chain_display_name,
+          toNull(data.execution_id),
+          toNull(data.timestamp),
+          toNull(data.chain_name),
+          toNull(data.chain_display_name),
           boolToSqlite(data.precheck_passed),
-          data.current_day,
-          data.next_unchecked_day,
-          (data.should_proceed === null || data.should_proceed === undefined) ? null : boolToSqlite(data.should_proceed),
-          data.tx_hash,
-          data.tx_status,
-          data.revert_reason,
-          data.gas_used,
-          data.balance_before_eth,
-          data.balance_after_eth,
-          data.recursion_depth,
+          toNull(data.current_day),
+          toNull(data.next_unchecked_day),
+          boolToSqlite(data.should_proceed),
+          toNull(data.tx_hash),
+          toNull(data.tx_status),
+          toNull(data.revert_reason),
+          toNull(data.gas_used),
+          toNull(data.balance_before_eth),
+          toNull(data.balance_after_eth),
+          toNull(data.recursion_depth),
           boolToSqlite(data.max_recursion_reached),
-          data.error_message,
-          data.error_stack,
-          data.execution_time_ms
+          toNull(data.error_message),
+          toNull(data.error_stack),
+          toNull(data.execution_time_ms)
         ];
         const stmt = this.db.prepare(sql);
         const result = stmt.run(...params);
@@ -278,7 +285,15 @@ export class DatabaseService {
         VALUES (?, ?, ?, ?)
       `;
 
-      const params = [executionLogId, token.id, balanceBefore, balanceAfter];
+      // Helper to convert undefined to null (SQLite requirement)
+      const toNull = (v) => (v === undefined ? null : v);
+
+      const params = [
+        toNull(executionLogId), 
+        toNull(token.id), 
+        toNull(balanceBefore), 
+        toNull(balanceAfter)
+      ];
 
       if (this.config.isSQLite()) {
         const stmt = this.db.prepare(sql);
@@ -331,14 +346,23 @@ export class DatabaseService {
       INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name, is_active)
       VALUES (?, ?, ?, ?, ?, ?)
     `;
+    
+    // Helper to convert undefined to null (SQLite requirement)
+    const toNull = (v) => (v === undefined ? null : v);
+    // Helper to convert boolean to SQLite integer (0 or 1)
+    const boolToSqlite = (v) => {
+      if (v === null || v === undefined) return 1; // Default to active
+      return v ? 1 : 0;
+    };
+    
     if (this.config.isSQLite()) {
       const params = [
-        tokenData.token_address,
-        tokenData.token_symbol,
-        tokenData.token_name,
-        tokenData.decimals,
-        tokenData.chain_name,
-        (tokenData.is_active === undefined || tokenData.is_active === null) ? 1 : (tokenData.is_active ? 1 : 0)
+        toNull(tokenData.token_address),
+        toNull(tokenData.token_symbol),
+        toNull(tokenData.token_name),
+        toNull(tokenData.decimals),
+        toNull(tokenData.chain_name),
+        boolToSqlite(tokenData.is_active)
       ];
       const stmt = this.db.prepare(sql);
       const result = stmt.run(...params);
