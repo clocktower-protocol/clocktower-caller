@@ -142,7 +142,7 @@ export function getDayOfQuarter(day) {
   const month = day.month(); // 0-11
   const quarter = Math.floor(month / 3); // 0, 1, 2, 3
   const quarterStartMonth = quarter * 3; // 0, 3, 6, 9
-  const quarterStart = dayjs.utc([day.year(), quarterStartMonth, 1]);
+  const quarterStart = dayjs.utc().year(day.year()).month(quarterStartMonth).date(1);
   return day.diff(quarterStart, 'day') + 1;
 }
 
