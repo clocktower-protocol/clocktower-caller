@@ -324,11 +324,21 @@ See [MIGRATION.md](./MIGRATION.md) for detailed migration instructions.
 
 ## Security
 
-- Store private keys securely
-- Use environment variables for sensitive data
-- Regularly rotate API keys
-- Monitor logs for suspicious activity
-- Consider using hardware wallets for production
+### Private Key Management
+
+- **Store private keys securely**: Private keys are only accessed from environment variables (`CALLER_PRIVATE_KEY`)
+- **Never commit private keys**: 
+  - The `.env` file is gitignored
+  - The `createWallet.js` script can generate `.env.wallet` files - these are also gitignored
+  - **Never commit** `.env`, `.env.wallet`, or any files containing private keys
+- **Best practices**:
+  - Use environment variables for all sensitive data
+  - If using `createWallet.js --save`, manually copy keys to your main `.env` file and delete `.env.wallet`
+  - Use a secrets management service (AWS Secrets Manager, HashiCorp Vault, etc.) in production
+  - Consider using hardware wallets for production deployments
+  - Regularly rotate API keys and private keys
+  - Monitor logs for suspicious activity
+  - Restrict file permissions on `.env` files: `chmod 600 .env`
 
 ## License
 

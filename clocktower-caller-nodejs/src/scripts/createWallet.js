@@ -79,6 +79,10 @@ class WalletCreator {
   saveToEnv(wallet, filePath = '.env.wallet') {
     try {
       const envContent = `# Generated wallet - ${new Date().toISOString()}
+# SECURITY WARNING: This file contains a private key!
+# - Copy these values to your main .env file
+# - Delete this file after copying
+# - Never commit this file to version control
 CALLER_ADDRESS=${wallet.address}
 CALLER_PRIVATE_KEY=${wallet.privateKey}
 
@@ -87,6 +91,7 @@ CALLER_PRIVATE_KEY=${wallet.privateKey}
 
       writeFileSync(filePath, envContent);
       this.logger.info(`Wallet saved to ${filePath}`);
+      this.logger.warn(`⚠️  SECURITY: Copy values to .env and delete ${filePath} after use`);
       return true;
     } catch (error) {
       this.logger.error('Failed to save wallet to file', error);
@@ -118,6 +123,9 @@ CALLER_PRIVATE_KEY=${wallet.privateKey}
       console.log('\n⚠️  WARNING: Keep your private key secure!');
       console.log('   - Never share it with anyone');
       console.log('   - Store it in a secure location');
+      console.log('   - Never commit it to version control');
+      console.log('   - If saved to .env.wallet, copy to .env and delete .env.wallet');
+      console.log('   - Consider using a secrets management service in production');
       console.log('   - Consider using a hardware wallet for production');
     }
   }
