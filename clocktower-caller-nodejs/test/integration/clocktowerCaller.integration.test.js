@@ -29,15 +29,19 @@ vi.mock('viem', () => {
 
 // Mock Resend (email service)
 vi.mock('resend', () => {
-  return {
-    Resend: vi.fn(() => ({
-      emails: {
+  class MockResend {
+    constructor(apiKey) {
+      this.apiKey = apiKey;
+      this.emails = {
         send: vi.fn(() => Promise.resolve({ 
           data: { id: 'test-email-id' }, 
           error: null 
         }))
-      }
-    }))
+      };
+    }
+  }
+  return {
+    Resend: MockResend
   };
 });
 

@@ -21,7 +21,7 @@
     "crypto",
     "defi"
   ],
-  "author": "Clocktower Finance",
+  "author": "Clocktower LLC",
   "license": "MIT",
   "dependencies": {
     "better-sqlite3": "^12.4.1",
@@ -31,12 +31,13 @@
     "resend": "^6.3.0",
     "viem": "^2.21.1",
     "winston": "^3.11.0",
-    "winston-daily-rotate-file": "^4.7.1"
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
-    "vitest": "^1.0.0",
-    "@vitest/coverage-v8": "^1.0.0"
+    "vitest": "^4.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "esbuild": ">=0.25.0"
   },
   "engines": {
     "node": ">=18.0.0"
