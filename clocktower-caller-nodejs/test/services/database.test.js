@@ -10,27 +10,31 @@ vi.mock('better-sqlite3', () => {
     all: vi.fn((...params) => [{ id: 1, name: 'test' }])
   };
   
-  const mockDb = {
-    prepare: vi.fn((sql) => {
-      // For schema initialization, return a statement that can exec
-      if (sql.includes('SELECT name FROM sqlite_master')) {
-        return {
-          all: vi.fn(() => [
-            { name: 'execution_logs' },
-            { name: 'tokens' },
-            { name: 'token_balances' }
-          ])
-        };
-      }
-      return mockStmt;
-    }),
-    exec: vi.fn(),
-    pragma: vi.fn(),
-    close: vi.fn()
-  };
+  class MockDatabase {
+    constructor(filename, options) {
+      this.filename = filename;
+      this.options = options;
+      this.prepare = vi.fn((sql) => {
+        // For schema initialization, return a statement that can exec
+        if (sql.includes('SELECT name FROM sqlite_master')) {
+          return {
+            all: vi.fn(() => [
+              { name: 'execution_logs' },
+              { name: 'tokens' },
+              { name: 'token_balances' }
+            ])
+          };
+        }
+        return mockStmt;
+      });
+      this.exec = vi.fn();
+      this.pragma = vi.fn();
+      this.close = vi.fn();
+    }
+  }
   
   return {
-    default: vi.fn(() => mockDb)
+    default: MockDatabase
   };
 });
 
