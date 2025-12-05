@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "clocktower-caller-unified",
+	"name": "clocktower-caller",
 	"main": "remit_script.js",
 	"compatibility_date": "2025-04-20",
 	"observability": {
@@ -31,7 +31,7 @@
 		"ALCHEMY_URL_SEPOLIA_BASE" : "https://base-sepolia.g.alchemy.com/v2/",
 		"CLOCKTOWER_ADDRESS_SEPOLIA_BASE" : "0x6A0791Cd884f2199dC8F372f6715f675D2950922",
 		"CHAIN_ID_SEPOLIA_BASE" : "84532",
-		"USDC_ADDRESS_SEPOLIA_BASE" : "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+		"USDC_ADDRESS_SEPOLIA_BASE" : "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
 		
 		// Shared Configuration (set as secrets in Cloudflare)
 		//"SENDER_ADDRESS" : "onboarding@resend.dev"
@@ -44,7 +44,7 @@
 
 	
 	"triggers": {
-		"crons": ["30 0 * * *"]
+		"crons": ["25 0 * * *"]
 	}
 	
     
