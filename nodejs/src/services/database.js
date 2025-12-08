@@ -1,6 +1,7 @@
 /**
  * Database Service
  * 
+ * 
  * Unified database interface supporting both SQLite and PostgreSQL.
  * Handles database initialization, schema management, and data operations.
  */
@@ -502,7 +503,7 @@ export class DatabaseService {
       this.logger.info('Database connection closed');
     }
   }
-
+ 
   /**
    * Check if database is initialized
    * @returns {boolean} True if initialized
@@ -511,3 +512,4 @@ export class DatabaseService {
     return this.isInitialized && this.db !== null;
   }
 }
+
