@@ -1,13 +1,14 @@
 -- Token registry table
 CREATE TABLE tokens (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  token_address TEXT UNIQUE NOT NULL,
+  token_address TEXT NOT NULL,
   token_symbol TEXT NOT NULL,
   token_name TEXT NOT NULL,
   decimals INTEGER NOT NULL,
   chain_name TEXT NOT NULL,
   is_active BOOLEAN DEFAULT TRUE,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(token_address, chain_name)
 );
 
 -- Main execution log table
@@ -64,7 +65,7 @@ CREATE INDEX idx_execution_logs_tx_hash ON execution_logs(tx_hash);
 CREATE INDEX idx_execution_logs_status ON execution_logs(tx_status);
 CREATE INDEX idx_execution_logs_chain ON execution_logs(chain_name);
 CREATE INDEX idx_token_balances_execution ON token_balances(execution_log_id);
-CREATE INDEX idx_tokens_address ON tokens(token_address);
+CREATE INDEX idx_tokens_address_chain ON tokens(token_address, chain_name);
 
 -- Insert common tokens for Sepolia chain
 INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name) VALUES

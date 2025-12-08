@@ -16,13 +16,14 @@
 
 CREATE TABLE tokens (
   id INTEGER PRIMARY KEY AUTOINCREMENT,  -- PostgreSQL: SERIAL PRIMARY KEY
-  token_address TEXT UNIQUE NOT NULL,
+  token_address TEXT NOT NULL,
   token_symbol TEXT NOT NULL,
   token_name TEXT NOT NULL,
   decimals INTEGER NOT NULL,
   chain_name TEXT NOT NULL,
   is_active BOOLEAN DEFAULT TRUE,
-  created_at TEXT DEFAULT (datetime('now'))  -- PostgreSQL: TIMESTAMP DEFAULT NOW()
+  created_at TEXT DEFAULT (datetime('now')),  -- PostgreSQL: TIMESTAMP DEFAULT NOW()
+  UNIQUE(token_address, chain_name)
 );
 
 -- =============================================================================
@@ -99,7 +100,7 @@ CREATE INDEX idx_token_balances_execution ON token_balances(execution_log_id);
 CREATE INDEX idx_token_balances_token ON token_balances(token_id);
 
 -- Tokens indexes
-CREATE INDEX idx_tokens_address ON tokens(token_address);
+CREATE INDEX idx_tokens_address_chain ON tokens(token_address, chain_name);
 CREATE INDEX idx_tokens_chain ON tokens(chain_name);
 CREATE INDEX idx_tokens_active ON tokens(is_active);
 
