@@ -5,7 +5,7 @@ import utc from 'dayjs/plugin/utc';
 import { Resend } from 'resend';
 dayjs.extend(utc);
 
-// Inline ABI (only includes remit function and nextUncheckedDay function)
+// Inline ABI (only includes remit function and nextUncheckedDay function) 
 const abi = [
   {
     name: 'remit',
