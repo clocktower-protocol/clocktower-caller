@@ -339,14 +339,9 @@ export class DatabaseService {
   /**
    * Create new token record
    * @param {Object} tokenData - Token data
-   * @returns {Promise<Object>} Created token object
+   * @returns {Promise<Object>} Created token object or existing token if already exists
    */
   async createToken(tokenData) {
-    const sql = `
-      INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name, is_active)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-    
     // Helper to convert undefined to null (SQLite requirement)
     const toNull = (v) => (v === undefined ? null : v);
     // Helper to convert boolean to SQLite integer (0 or 1)
@@ -356,6 +351,11 @@ export class DatabaseService {
     };
     
     if (this.config.isSQLite()) {
+      // Use INSERT OR IGNORE to handle composite unique constraint (token_address, chain_name)
+      const insertSql = `
+        INSERT OR IGNORE INTO tokens (token_address, token_symbol, token_name, decimals, chain_name, is_active)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `;
       const params = [
         toNull(tokenData.token_address),
         toNull(tokenData.token_symbol),
@@ -364,10 +364,26 @@ export class DatabaseService {
         toNull(tokenData.chain_name),
         boolToSqlite(tokenData.is_active)
       ];
-      const stmt = this.db.prepare(sql);
-      const result = stmt.run(...params);
-      return { id: result.lastInsertRowid, ...tokenData };
+      const stmt = this.db.prepare(insertSql);
+      stmt.run(...params);
+      
+      // Query to get the token ID (works whether insert happened or token already existed)
+      const selectSql = 'SELECT * FROM tokens WHERE token_address = ? AND chain_name = ?';
+      const selectStmt = this.db.prepare(selectSql);
+      const existing = selectStmt.get(tokenData.token_address, tokenData.chain_name);
+      
+      if (existing) {
+        return existing;
+      }
+      throw new Error('Failed to create or retrieve token record');
     } else if (this.config.isPostgreSQL()) {
+      // Use ON CONFLICT for PostgreSQL to handle composite unique constraint
+      const sql = `
+        INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (token_address, chain_name) DO NOTHING
+        RETURNING *
+      `;
       const params = [
         tokenData.token_address,
         tokenData.token_symbol,
@@ -379,7 +395,18 @@ export class DatabaseService {
       const client = await this.db.connect();
       try {
         const result = await client.query(sql, params);
-        return { id: result.rows[0].id, ...tokenData };
+        
+        // If insert was ignored (conflict), fetch the existing record
+        if (result.rows.length === 0) {
+          const selectSql = 'SELECT * FROM tokens WHERE token_address = $1 AND chain_name = $2';
+          const selectResult = await client.query(selectSql, [tokenData.token_address, tokenData.chain_name]);
+          if (selectResult.rows.length > 0) {
+            return selectResult.rows[0];
+          }
+          throw new Error('Failed to create or retrieve token record');
+        }
+        
+        return result.rows[0];
       } finally {
         client.release();
       }

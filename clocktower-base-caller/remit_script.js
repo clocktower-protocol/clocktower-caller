@@ -97,18 +97,21 @@ export default {
 
     async function logTokenBalance(executionLogId, tokenAddress, balanceBefore, balanceAfter) {
       try {
-        // Get or create token record
-        let token = await env.DB.prepare(`
+        // Get or create token record using INSERT OR IGNORE to handle race conditions
+        // First try to insert, then query to get the ID
+        await env.DB.prepare(`
+          INSERT OR IGNORE INTO tokens (token_address, token_symbol, token_name, decimals, chain_name)
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(tokenAddress, 'USDC', 'USD Coin', 6, 'base').run();
+        
+        // Query to get the token ID (works whether insert happened or token already existed)
+        const token = await env.DB.prepare(`
           SELECT id FROM tokens WHERE token_address = ? AND chain_name = ?
         `).bind(tokenAddress, 'base').first();
         
         if (!token) {
-          // Insert new token if not exists
-          const tokenResult = await env.DB.prepare(`
-            INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name)
-            VALUES (?, ?, ?, ?, ?)
-          `).bind(tokenAddress, 'USDC', 'USD Coin', 6, 'base').run();
-          token = { id: tokenResult.meta.last_row_id };
+          console.error('Failed to get or create token record for', tokenAddress);
+          return;
         }
         
         // Insert token balance
