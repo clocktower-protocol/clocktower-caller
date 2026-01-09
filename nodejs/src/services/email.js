@@ -182,6 +182,86 @@ export class EmailService {
   }
 
   /**
+   * Send error email notification
+   * @param {string} chainDisplayName - Chain display name
+   * @param {string} errorMessage - Error message
+   * @param {string} errorType - Error type (e.g., 'PreCheck Error', 'Transaction Failure')
+   * @param {Object} additionalDetails - Additional error details
+   * @returns {Promise<Object|null>} Email result or null if not configured
+   */
+  async sendErrorEmail(chainDisplayName, errorMessage, errorType, additionalDetails = {}) {
+    if (!this.isConfigured) {
+      this.logger.info('Email configuration not available, skipping error email notification');
+      return null;
+    }
+
+    try {
+      const subject = `❌ Clocktower Error - ${chainDisplayName}`;
+      
+      // Build additional details HTML
+      let additionalDetailsHtml = '';
+      if (Object.keys(additionalDetails).length > 0) {
+        additionalDetailsHtml = `
+          <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #0369a1; margin-top: 0;">Additional Details</h3>
+            ${Object.entries(additionalDetails).map(([key, value]) => 
+              `<p><strong>${key}:</strong> ${value !== null && value !== undefined ? value : 'N/A'}</p>`
+            ).join('')}
+          </div>
+        `;
+      }
+
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #dc2626;">❌ Clocktower Execution Error</h2>
+          
+          <div style="background-color: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <h3 style="color: #991b1b; margin-top: 0;">Error Information</h3>
+            <p><strong>Chain:</strong> ${chainDisplayName}</p>
+            <p><strong>Error Type:</strong> ${errorType}</p>
+            <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+          </div>
+          
+          <div style="background-color: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #991b1b; margin-top: 0;">Error Message</h3>
+            <pre style="background-color: #ffffff; padding: 15px; border-radius: 4px; overflow-x: auto; color: #7f1d1d; white-space: pre-wrap; word-wrap: break-word;">${errorMessage}</pre>
+          </div>
+          
+          ${additionalDetailsHtml}
+          
+          <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; color: #92400e;"><strong>⚠️ Action Required:</strong> Please investigate this error and ensure the Clocktower caller is functioning correctly.</p>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+          <p style="color: #6b7280; font-size: 14px; text-align: center;">
+            Clocktower Caller - ${chainDisplayName} Chain Monitoring
+          </p>
+        </div>
+      `;
+
+      const { data, error } = await this.resend.emails.send({
+        from: this.senderAddress,
+        to: [this.notificationEmail],
+        subject: subject,
+        html: htmlContent,
+      });
+
+      if (error) {
+        this.logger.error('Error email send failed', error);
+        throw new Error(`Email error: ${error.message}`);
+      }
+
+      this.logger.info(`Error email sent: ${data.id}`);
+      return data;
+    } catch (error) {
+      this.logger.error('Failed to send error email', error);
+      // Don't throw here - we don't want email failures to break the error handling flow
+      return null;
+    }
+  }
+
+  /**
    * Send summary email for multi-chain execution
    * @param {Array} results - Array of execution results
    * @returns {Promise<Object|null>} Email result or null if not configured
