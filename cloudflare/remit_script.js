@@ -54,6 +54,80 @@ const erc20Abi = [
 // Maximum recursion depth per cron invocation
 const MAX_RECURSION_DEPTH = 5;
 
+// Helper function to send error emails from outside processChain scope
+async function sendChainErrorEmail(chainConfig, errorMessage, errorType, env, additionalDetails = {}) {
+  try {
+    // Only send email if email configuration is available
+    if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
+      console.log(`[${chainConfig.chainName}] Email configuration not available, skipping error email notification`);
+      return;
+    }
+
+    const resend = new Resend(env.RESEND_API_KEY);
+    const subject = `❌ Clocktower Error - ${chainConfig.displayName}`;
+    
+    // Build additional details HTML
+    let additionalDetailsHtml = '';
+    if (Object.keys(additionalDetails).length > 0) {
+      additionalDetailsHtml = `
+        <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #0369a1; margin-top: 0;">Additional Details</h3>
+          ${Object.entries(additionalDetails).map(([key, value]) => 
+            `<p><strong>${key}:</strong> ${value !== null && value !== undefined ? value : 'N/A'}</p>`
+          ).join('')}
+        </div>
+      `;
+    }
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #dc2626;">❌ Clocktower Execution Error</h2>
+        
+        <div style="background-color: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+          <h3 style="color: #991b1b; margin-top: 0;">Error Information</h3>
+          <p><strong>Chain:</strong> ${chainConfig.displayName}</p>
+          <p><strong>Error Type:</strong> ${errorType}</p>
+          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+        </div>
+        
+        <div style="background-color: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #991b1b; margin-top: 0;">Error Message</h3>
+          <pre style="background-color: #ffffff; padding: 15px; border-radius: 4px; overflow-x: auto; color: #7f1d1d; white-space: pre-wrap; word-wrap: break-word;">${errorMessage}</pre>
+        </div>
+        
+        ${additionalDetailsHtml}
+        
+        <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0; color: #92400e;"><strong>⚠️ Action Required:</strong> Please investigate this error and ensure the Clocktower caller is functioning correctly.</p>
+        </div>
+        
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+        <p style="color: #6b7280; font-size: 14px; text-align: center;">
+          Clocktower Caller - ${chainConfig.displayName} Chain Monitoring
+        </p>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
+      to: [env.NOTIFICATION_EMAIL],
+      subject: subject,
+      html: htmlContent,
+    });
+
+    if (error) {
+      console.error(`[${chainConfig.chainName}] Error email send failed:`, error);
+      throw new Error(`Email error: ${error.message}`);
+    }
+
+    console.log(`[${chainConfig.chainName}] Error email sent:`, data.id);
+    return data;
+  } catch (error) {
+    console.error(`[${chainConfig.chainName}] Failed to send error email:`, error);
+    // Don't throw here - we don't want email failures to break the error handling flow
+  }
+}
+
 // Chain configuration system
 function getChainConfigs(env) {
   return [
@@ -95,8 +169,14 @@ export default {
     // Process all chains in parallel with graceful error handling
     const chainPromises = chainConfigs.map(chainConfig => 
       processChain(chainConfig, env, globalExecutionId)
-        .catch(error => {
+        .catch(async error => {
           console.error(`Error processing chain ${chainConfig.chainName}:`, error);
+          // Try to send error email (non-blocking)
+          try {
+            await sendChainErrorEmail(chainConfig, error.message, 'Chain Processing Error', env);
+          } catch (emailError) {
+            console.error(`Failed to send error email for chain ${chainConfig.chainName}:`, emailError);
+          }
           // Log error to database if possible
           return { chain: chainConfig.chainName, error: error.message };
         })
@@ -307,6 +387,79 @@ async function processChain(chainConfig, env, globalExecutionId) {
     }
   }
 
+  async function sendErrorEmail(errorMessage, errorType, additionalDetails = {}) {
+    try {
+      // Only send email if email configuration is available
+      if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
+        console.log(`[${chainConfig.chainName}] Email configuration not available, skipping error email notification`);
+        return;
+      }
+
+      const resend = new Resend(env.RESEND_API_KEY);
+      const subject = `❌ Clocktower Error - ${chainConfig.displayName}`;
+      
+      // Build additional details HTML
+      let additionalDetailsHtml = '';
+      if (Object.keys(additionalDetails).length > 0) {
+        additionalDetailsHtml = `
+          <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #0369a1; margin-top: 0;">Additional Details</h3>
+            ${Object.entries(additionalDetails).map(([key, value]) => 
+              `<p><strong>${key}:</strong> ${value !== null && value !== undefined ? value : 'N/A'}</p>`
+            ).join('')}
+          </div>
+        `;
+      }
+
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #dc2626;">❌ Clocktower Execution Error</h2>
+          
+          <div style="background-color: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <h3 style="color: #991b1b; margin-top: 0;">Error Information</h3>
+            <p><strong>Chain:</strong> ${chainConfig.displayName}</p>
+            <p><strong>Error Type:</strong> ${errorType}</p>
+            <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+          </div>
+          
+          <div style="background-color: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #991b1b; margin-top: 0;">Error Message</h3>
+            <pre style="background-color: #ffffff; padding: 15px; border-radius: 4px; overflow-x: auto; color: #7f1d1d; white-space: pre-wrap; word-wrap: break-word;">${errorMessage}</pre>
+          </div>
+          
+          ${additionalDetailsHtml}
+          
+          <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; color: #92400e;"><strong>⚠️ Action Required:</strong> Please investigate this error and ensure the Clocktower caller is functioning correctly.</p>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+          <p style="color: #6b7280; font-size: 14px; text-align: center;">
+            Clocktower Caller - ${chainConfig.displayName} Chain Monitoring
+          </p>
+        </div>
+      `;
+
+      const { data, error } = await resend.emails.send({
+        from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
+        to: [env.NOTIFICATION_EMAIL],
+        subject: subject,
+        html: htmlContent,
+      });
+
+      if (error) {
+        console.error(`[${chainConfig.chainName}] Error email send failed:`, error);
+        throw new Error(`Email error: ${error.message}`);
+      }
+
+      console.log(`[${chainConfig.chainName}] Error email sent:`, data.id);
+      return data;
+    } catch (error) {
+      console.error(`[${chainConfig.chainName}] Failed to send error email:`, error);
+      // Don't throw here - we don't want email failures to break the error handling flow
+    }
+  }
+
   async function preCheck(recursiveExecutionId = null, recursionDepth = 0) {
     try {
       const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
@@ -386,6 +539,18 @@ async function processChain(chainConfig, env, globalExecutionId) {
         error_message: error.message,
         execution_time_ms: Date.now() - startTime
       });
+      
+      // Send error email
+      await sendErrorEmail(
+        error.message,
+        'PreCheck Error',
+        {
+          'Execution ID': recursiveExecutionId || executionId,
+          'Recursion Depth': recursionDepth.toString(),
+          'Execution Time (ms)': (Date.now() - startTime).toString()
+        }
+      );
+      
       return { shouldProceed: false, currentDay: null, nextUncheckedDay: null };
     }
   }
@@ -658,6 +823,21 @@ async function processChain(chainConfig, env, globalExecutionId) {
           revertReason = error.message || 'Failed to get revert reason';
         }
         console.log(`[${chainConfig.chainName}] Failed: ${revertReason}`);
+        
+        // Send error email for failed transaction
+        await sendErrorEmail(
+          `Transaction failed: ${revertReason}`,
+          'Transaction Failure',
+          {
+            'Transaction Hash': txHash,
+            'Transaction Link': `${chainConfig.explorerUrl}/tx/${txHash}`,
+            'Recursion Depth': recursionDepth.toString(),
+            'ETH Balance Before': balanceBeforeEth,
+            'ETH Balance After': balanceAfterEth,
+            'USDC Balance Before': balanceBeforeUsdc,
+            'USDC Balance After': balanceAfterUsdc
+          }
+        );
       }
 
       // Get final ETH balance
@@ -733,6 +913,17 @@ async function processChain(chainConfig, env, globalExecutionId) {
         error_message: error.message,
         execution_time_ms: Date.now() - startTime
       });
+      
+      // Send error email
+      await sendErrorEmail(
+        error.message,
+        'Transaction Execution Error',
+        {
+          'Execution ID': recursiveExecutionId,
+          'Recursion Depth': recursionDepth.toString(),
+          'Execution Time (ms)': (Date.now() - startTime).toString()
+        }
+      );
     }
   }
 

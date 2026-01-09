@@ -66,6 +66,21 @@ export class ClocktowerService {
       } catch (error) {
         this.logger.chain(chain.name, `Failed execution for ${chain.displayName}`, error);
         results.push({ chain: chain.name, success: false, error: error.message });
+        
+        // Send error email (non-blocking)
+        try {
+          await this.email.sendErrorEmail(
+            chain.displayName,
+            error.message,
+            'Chain Processing Error',
+            {
+              'Chain Name': chain.name,
+              'Error Stack': error.stack || 'N/A'
+            }
+          );
+        } catch (emailError) {
+          this.logger.chain(chain.name, 'Failed to send error email', emailError);
+        }
       }
     }
 
@@ -244,6 +259,22 @@ export class ClocktowerService {
         });
       } catch (logError) {
         this.logger.chain(chainConfig.name, 'PreCheck error logging skipped (DB not ready or insert failed)', logError);
+      }
+      
+      // Send error email (non-blocking)
+      try {
+        await this.email.sendErrorEmail(
+          chainConfig.displayName,
+          error.message,
+          'PreCheck Error',
+          {
+            'Execution ID': executionId,
+            'Execution Time (ms)': (Date.now() - startTime).toString(),
+            'Error Stack': error.stack || 'N/A'
+          }
+        );
+      } catch (emailError) {
+        this.logger.chain(chainConfig.name, 'Failed to send error email', emailError);
       }
       
       return { shouldProceed: false, currentDay: null, nextUncheckedDay: null };
@@ -465,6 +496,26 @@ export class ClocktowerService {
           revertReason = error.message || 'Failed to get revert reason';
         }
         this.logger.transaction(txHash, `Failed: ${revertReason}`);
+        
+        // Send error email for failed transaction (non-blocking)
+        try {
+          await this.email.sendErrorEmail(
+            chainConfig.displayName,
+            `Transaction failed: ${revertReason}`,
+            'Transaction Failure',
+            {
+              'Transaction Hash': txHash,
+              'Transaction Link': this.getExplorerUrl(chainConfig.displayName, txHash),
+              'Recursion Depth': recursionDepth.toString(),
+              'ETH Balance Before': balanceBeforeEth,
+              'ETH Balance After': balanceAfterEth,
+              'USDC Balance Before': balanceBeforeUsdc,
+              'USDC Balance After': balanceAfterUsdc
+            }
+          );
+        } catch (emailError) {
+          this.logger.chain(chainConfig.name, 'Failed to send error email', emailError);
+        }
       }
 
       // Get final ETH balance
@@ -577,7 +628,43 @@ export class ClocktowerService {
       } catch (logError) {
         this.logger.chain(chainConfig.name, 'Desmond error logging skipped (DB not ready or insert failed)', logError);
       }
+      
+      // Send error email (non-blocking)
+      try {
+        await this.email.sendErrorEmail(
+          chainConfig.displayName,
+          error.message,
+          'Transaction Execution Error',
+          {
+            'Execution ID': `${executionId}_recursion_${recursionDepth}`,
+            'Recursion Depth': recursionDepth.toString(),
+            'Execution Time (ms)': (Date.now() - startTime).toString(),
+            'Error Stack': error.stack || 'N/A'
+          }
+        );
+      } catch (emailError) {
+        this.logger.chain(chainConfig.name, 'Failed to send error email', emailError);
+      }
+      
       return 0;
     }
+  }
+
+  /**
+   * Get blockchain explorer URL for a transaction
+   * @param {string} chainDisplayName - Chain display name
+   * @param {string} txHash - Transaction hash
+   * @returns {string} Explorer URL
+   */
+  getExplorerUrl(chainDisplayName, txHash) {
+    const explorerUrls = {
+      'Base': `https://basescan.org/tx/${txHash}`,
+      'Base Sepolia': `https://sepolia.basescan.org/tx/${txHash}`,
+      'Ethereum': `https://etherscan.io/tx/${txHash}`,
+      'Arbitrum': `https://arbiscan.io/tx/${txHash}`,
+      'Polygon': `https://polygonscan.com/tx/${txHash}`
+    };
+
+    return explorerUrls[chainDisplayName] || `https://etherscan.io/tx/${txHash}`;
   }
 }
