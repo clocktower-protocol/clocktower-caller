@@ -416,7 +416,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
         const month = checkDay.month(); // 0-11
         const quarter = Math.floor(month / 3); // 0, 1, 2, 3
         const quarterStartMonth = quarter * 3; // 0, 3, 6, 9
-        const quarterStart = dayjs.utc([checkDay.year(), quarterStartMonth, 1]);
+        const quarterStart = dayjs.utc().year(checkDay.year()).month(quarterStartMonth).date(1);
         const dayOfQuarter = checkDay.diff(quarterStart, 'day') + 1;
         
         const dayOfYear = checkDay.diff(checkDay.startOf('year'), 'day') + 1; // 1-366
@@ -522,7 +522,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
         const month = checkDay.month(); // 0-11
         const quarter = Math.floor(month / 3); // 0, 1, 2, 3
         const quarterStartMonth = quarter * 3; // 0, 3, 6, 9
-        const quarterStart = dayjs.utc([checkDay.year(), quarterStartMonth, 1]);
+        const quarterStart = dayjs.utc().year(checkDay.year()).month(quarterStartMonth).date(1);
         const dayOfQuarter = checkDay.diff(quarterStart, 'day') + 1;
         
         const dayOfYear = checkDay.diff(checkDay.startOf('year'), 'day') + 1; // 1-366
