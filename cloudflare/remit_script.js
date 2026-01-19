@@ -54,6 +54,22 @@ const erc20Abi = [
 // Maximum recursion depth per cron invocation
 const MAX_RECURSION_DEPTH = 5;
 
+// Email rate limiter - ensures we don't exceed Resend's 2 requests/second limit
+let lastEmailTimestamp = 0;
+const MIN_EMAIL_INTERVAL_MS = 500; // 500ms = max 2 emails per second
+
+async function waitForEmailRateLimit() {
+  const now = Date.now();
+  const timeSinceLastEmail = now - lastEmailTimestamp;
+  
+  if (timeSinceLastEmail < MIN_EMAIL_INTERVAL_MS) {
+    const waitTime = MIN_EMAIL_INTERVAL_MS - timeSinceLastEmail;
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  
+  lastEmailTimestamp = Date.now();
+}
+
 // Helper function to send error emails from outside processChain scope
 async function sendChainErrorEmail(chainConfig, errorMessage, errorType, env, additionalDetails = {}) {
   try {
@@ -62,6 +78,9 @@ async function sendChainErrorEmail(chainConfig, errorMessage, errorType, env, ad
       console.log(`[${chainConfig.chainName}] Email configuration not available, skipping error email notification`);
       return;
     }
+
+    // Wait for rate limit before sending
+    await waitForEmailRateLimit();
 
     const resend = new Resend(env.RESEND_API_KEY);
     const subject = `❌ Clocktower Error - ${chainConfig.displayName}`;
@@ -273,6 +292,9 @@ async function processChain(chainConfig, env, globalExecutionId) {
         return;
       }
 
+      // Wait for rate limit before sending
+      await waitForEmailRateLimit();
+
       const resend = new Resend(env.RESEND_API_KEY);
       const subject = `✅ Clocktower Remit Success - ${chainConfig.displayName}`;
       const htmlContent = `
@@ -331,6 +353,9 @@ async function processChain(chainConfig, env, globalExecutionId) {
         console.log(`[${chainConfig.chainName}] Email configuration not available, skipping no subscriptions email notification`);
         return;
       }
+
+      // Wait for rate limit before sending
+      await waitForEmailRateLimit();
 
       const resend = new Resend(env.RESEND_API_KEY);
       const subject = `📭 Clocktower No Subscriptions - ${chainConfig.displayName}`;
@@ -394,6 +419,9 @@ async function processChain(chainConfig, env, globalExecutionId) {
         console.log(`[${chainConfig.chainName}] Email configuration not available, skipping error email notification`);
         return;
       }
+
+      // Wait for rate limit before sending
+      await waitForEmailRateLimit();
 
       const resend = new Resend(env.RESEND_API_KEY);
       const subject = `❌ Clocktower Error - ${chainConfig.displayName}`;
