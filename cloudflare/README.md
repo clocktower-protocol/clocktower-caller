@@ -85,6 +85,52 @@ The script requires the following environment variables:
 - `NOTIFICATION_EMAIL`: Email address to receive notifications (set as secret)
 - `SENDER_ADDRESS`: Sender email address (defaults to 'onboarding@resend.dev' if not provided)
 
+## Local Development Setup
+
+For local development, secrets are managed using a `.dev.vars` file. This file is automatically loaded by Wrangler when running `wrangler dev` and is git-ignored to prevent committing secrets.
+
+### Setting Up Local Secrets
+
+1. **Copy the example file:**
+   ```bash
+   cp .dev.vars.example .dev.vars
+   ```
+
+2. **Fill in your actual values** in `.dev.vars`:
+   ```bash
+   CALLER_ADDRESS=0xYourActualAddress
+   CALLER_PRIVATE_KEY=0xYourActualPrivateKey
+   ALCHEMY_API_KEY=your_actual_alchemy_key
+   RESEND_API_KEY=re_your_actual_resend_key
+   NOTIFICATION_EMAIL=your-email@example.com
+   SENDER_ADDRESS=your-sender@example.com
+   ```
+
+3. **Run locally:**
+   ```bash
+   npm run dev
+   ```
+
+The `.dev.vars` file will be automatically loaded by Wrangler. **Never commit this file** - it's already in `.gitignore`.
+
+### Production Secrets
+
+For production deployments, secrets must be set using Cloudflare's secret management:
+
+```bash
+# Set secrets using Wrangler CLI
+wrangler secret put CALLER_PRIVATE_KEY
+wrangler secret put CALLER_ADDRESS
+wrangler secret put ALCHEMY_API_KEY
+wrangler secret put RESEND_API_KEY
+wrangler secret put NOTIFICATION_EMAIL
+wrangler secret put SENDER_ADDRESS
+```
+
+Alternatively, you can set secrets via the [Cloudflare Dashboard](https://dash.cloudflare.com/) under your Worker's Settings → Variables and Secrets.
+
+**Note:** Non-secret environment variables (like `ALCHEMY_URL_BASE`, `CLOCKTOWER_ADDRESS_BASE`, etc.) are defined in `wrangler.jsonc` under the `vars` section and are committed to version control.
+
 ## Adding New Chains
 
 To add a new chain, follow these steps:
@@ -134,12 +180,18 @@ curl https://your-worker.workers.dev/
 # Install dependencies
 npm install
 
+# Set up local secrets (see "Local Development Setup" section above)
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars with your actual values
+
 # Run locally
 npm run dev
 
 # Deploy to Cloudflare
 npm run deploy
 ```
+
+**Important:** Before running locally, make sure you've created a `.dev.vars` file with your secrets. See the "Local Development Setup" section above for details.
 
 ## Error Handling
 

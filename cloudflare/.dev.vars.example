@@ -1,0 +1,14 @@
+# Local Development Secrets
+# Copy this file to .dev.vars and fill in your actual values
+# .dev.vars is automatically loaded by Wrangler during local development
+# This file is git-ignored to prevent committing secrets
+
+# Blockchain Configuration
+CALLER_ADDRESS=0x0000000000000000000000000000000000000000
+CALLER_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000000
+ALCHEMY_API_KEY=your_alchemy_api_key_here
+
+# Email Notifications (Optional)
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTIFICATION_EMAIL=your-email@example.com
+SENDER_ADDRESS=onboarding@resend.dev
