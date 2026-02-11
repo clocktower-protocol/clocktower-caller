@@ -79,6 +79,32 @@ The script requires the following environment variables:
 
 - `DB`: Cloudflare D1 database binding for execution logging
 
+**Important:** The `database_id` in `wrangler.jsonc` must be set to your own D1 database ID. Each deployment uses a separate database; the value in the repo is an example and will not work for your worker.
+
+1. **Create a D1 database** (if you haven't already):
+   ```bash
+   wrangler d1 create clocktower_caller_logs
+   ```
+   Or create one in the [Cloudflare Dashboard](https://dash.cloudflare.com/) under Workers & Pages → D1.
+
+2. **Copy the database ID** from the command output or dashboard.
+
+3. **Update `wrangler.jsonc`** — in the `d1_databases` section, set `database_id` to your database's ID:
+   ```jsonc
+   "d1_databases": [
+     {
+       "binding": "DB",
+       "database_name": "clocktower_caller_logs",
+       "database_id": "your-database-id-here"
+     }
+   ]
+   ```
+
+4. **Apply the schema** (see `schema.sql`):
+   ```bash
+   wrangler d1 execute clocktower_caller_logs --file=./schema.sql
+   ```
+
 ### Email Notifications (Optional)
 
 - `RESEND_API_KEY`: Resend API key for sending email notifications (set as secret)
@@ -165,14 +191,25 @@ The script is designed to run as a scheduled Cloudflare Worker. It can be trigge
 
 ### Scheduled Execution
 
-The worker runs automatically via cron schedule: `30 0 * * *` (daily at 00:30 UTC).
+The worker runs on a schedule defined in `wrangler.jsonc` under `triggers.crons`. Set the schedule to whatever time you think is appropriate for your deployment. Times are in UTC.
+
+Example format: `minute hour day month weekday` (e.g. `30 1 * * *` = daily at 01:30 UTC, `0 12 * * *` = daily at noon UTC). Edit the `crons` array in `wrangler.jsonc` to change it.
 
 ### Manual Execution
 
-You can also trigger the worker via HTTP request:
+**Local testing:** To trigger the scheduled handler locally, run the dev server with the test-scheduled flag, then call the scheduler endpoint:
+
 ```bash
-curl https://your-worker.workers.dev/
+npm run dev -- --test-scheduled
 ```
+
+In another terminal (with the worker listening on the default port, e.g. 8787):
+
+```bash
+curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
+```
+
+**Production:** To run remit on demand in production, use “Run” / “Trigger” for your Worker’s cron trigger in the [Cloudflare Dashboard](https://dash.cloudflare.com/) (Workers & Pages → your worker → Triggers), or wait for the next scheduled run.
 
 ### Development
 
