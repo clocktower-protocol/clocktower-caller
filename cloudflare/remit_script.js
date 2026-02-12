@@ -147,27 +147,22 @@ async function sendChainErrorEmail(chainConfig, errorMessage, errorType, env, ad
   }
 }
 
-// Parse TOKENS_* JSON array or fall back to single USDC from USDC_ADDRESS_*
+// Parse TOKENS_* JSON array for a chain. Returns [] if unset or invalid.
 function parseTokensForChain(env, chainKey) {
   const tokensRaw = env[`TOKENS_${chainKey}`];
-  if (tokensRaw) {
-    try {
-      const arr = JSON.parse(tokensRaw);
-      if (Array.isArray(arr) && arr.length > 0) {
-        return arr.map(t => ({
-          address: t.address,
-          symbol: t.symbol || 'UNKNOWN',
-          name: t.name ?? t.symbol ?? 'Unknown Token',
-          decimals: typeof t.decimals === 'number' ? t.decimals : 18
-        }));
-      }
-    } catch (_) { /* ignore invalid JSON */ }
+  if (!tokensRaw) return [];
+  try {
+    const arr = JSON.parse(tokensRaw);
+    if (!Array.isArray(arr) || arr.length === 0) return [];
+    return arr.map(t => ({
+      address: t.address,
+      symbol: t.symbol || 'UNKNOWN',
+      name: t.name ?? t.symbol ?? 'Unknown Token',
+      decimals: typeof t.decimals === 'number' ? t.decimals : 18
+    }));
+  } catch (_) {
+    return [];
   }
-  const usdcAddress = env[`USDC_ADDRESS_${chainKey}`];
-  if (usdcAddress) {
-    return [{ address: usdcAddress, symbol: 'USDC', name: 'USD Coin', decimals: 6 }];
-  }
-  return [];
 }
 
 // Chain configuration system

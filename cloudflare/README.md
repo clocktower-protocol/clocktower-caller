@@ -61,15 +61,13 @@ The script requires the following environment variables:
 - `ALCHEMY_URL_BASE`: Alchemy API URL for Base network (default: `https://base-mainnet.g.alchemy.com/v2/`)
 - `CLOCKTOWER_ADDRESS_BASE`: Clocktower Protocol contract address on Base
 - `CHAIN_ID_BASE`: Network chain ID (default: `8453`)
-- **Tokens:** Either set `TOKENS_BASE` (recommended) or `USDC_ADDRESS_BASE`.
-  - **`TOKENS_BASE`**: JSON array of tokens to track. Full list for this chain; you can include USDC and any other tokens. Example: `[{"address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","symbol":"USDC","name":"USD Coin","decimals":6},{"address":"0x4200000000000000000000000000000000000006","symbol":"WETH","name":"Wrapped Ether","decimals":18}]`. Each object: `address`, `symbol`, optional `name`, `decimals`.
-  - **`USDC_ADDRESS_BASE`**: Fallback when `TOKENS_BASE` is unset—tracks a single token (USDC). You can later move to `TOKENS_BASE` and stop setting this.
+- **`TOKENS_BASE`**: JSON array of tokens to track (required). Example: `[{"address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","symbol":"USDC","name":"USD Coin","decimals":6}]`. Add more objects for additional tokens. Each object: `address`, `symbol`, optional `name`, `decimals`.
 
 #### Base Sepolia Testnet:
 - `ALCHEMY_URL_SEPOLIA_BASE`: Alchemy API URL for Base Sepolia network (default: `https://base-sepolia.g.alchemy.com/v2/`)
 - `CLOCKTOWER_ADDRESS_SEPOLIA_BASE`: Clocktower Protocol contract address on Base Sepolia
 - `CHAIN_ID_SEPOLIA_BASE`: Network chain ID (default: `84532`)
-- **Tokens:** Either `TOKENS_SEPOLIA_BASE` (JSON array, same format as above) or `USDC_ADDRESS_SEPOLIA_BASE` as fallback.
+- **`TOKENS_SEPOLIA_BASE`**: JSON array of tokens (same format as `TOKENS_BASE`).
 
 ### Shared Configuration
 
@@ -163,9 +161,8 @@ Alternatively, you can set secrets via the [Cloudflare Dashboard](https://dash.c
 
 To add a new chain, follow these steps:
 
-1. **Add environment variables** (e.g. in Cloudflare Dashboard or `wrangler.jsonc`). Either use a token list or a single USDC fallback:
-   - **Option A (recommended):** `TOKENS_NEW_CHAIN` — JSON array of tokens, e.g. `[{"address":"0x...","symbol":"USDC","name":"USD Coin","decimals":6}]`
-   - **Option B:** `USDC_ADDRESS_NEW_CHAIN` — single token address (fallback when `TOKENS_NEW_CHAIN` is unset)
+1. **Add environment variables** (e.g. in Cloudflare Dashboard or `wrangler.jsonc`):
+   - `TOKENS_NEW_CHAIN` — JSON array of tokens, e.g. `[{"address":"0x...","symbol":"USDC","name":"USD Coin","decimals":6}]`
    - Also set: `ALCHEMY_URL_NEW_CHAIN`, `CLOCKTOWER_ADDRESS_NEW_CHAIN`, `CHAIN_ID_NEW_CHAIN`
 
 2. **Update `getChainConfigs()`** in `remit_script.js`: add a new entry and call `parseTokensForChain(env, 'NEW_CHAIN')` to build the `tokens` array, e.g.:

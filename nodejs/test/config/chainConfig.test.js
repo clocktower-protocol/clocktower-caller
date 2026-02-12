@@ -2,13 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ChainConfigService } from '../../src/config/chainConfig.js';
 
 describe('ChainConfigService', () => {
+  const baseTokensJson = JSON.stringify([{ address: '0x0987654321098765432109876543210987654321', symbol: 'USDC', name: 'USD Coin', decimals: 6 }]);
+  const sepoliaTokensJson = JSON.stringify([{ address: '0x2222222222222222222222222222222222222222', symbol: 'USDC', name: 'USD Coin', decimals: 6 }]);
+
   beforeEach(() => {
-    // Clear environment variables before each test
     vi.stubEnv('ACTIVE_CHAINS', undefined);
     vi.stubEnv('ALCHEMY_URL_BASE', undefined);
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', undefined);
     vi.stubEnv('CHAIN_ID_BASE', undefined);
-    vi.stubEnv('USDC_ADDRESS_BASE', undefined);
+    vi.stubEnv('TOKENS_BASE', undefined);
+    vi.stubEnv('TOKENS_SEPOLIA_BASE', undefined);
   });
 
   it('should load default chain when ACTIVE_CHAINS is not set', () => {
@@ -16,7 +19,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
 
     const service = new ChainConfigService();
     const chains = service.getAllActiveChains();
@@ -30,11 +33,11 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
     vi.stubEnv('ALCHEMY_URL_SEPOLIA_BASE', 'https://base-sepolia.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_SEPOLIA_BASE', '0x1111111111111111111111111111111111111111');
     vi.stubEnv('CHAIN_ID_SEPOLIA_BASE', '84532');
-    vi.stubEnv('USDC_ADDRESS_SEPOLIA_BASE', '0x2222222222222222222222222222222222222222');
+    vi.stubEnv('TOKENS_SEPOLIA_BASE', sepoliaTokensJson);
 
     const service = new ChainConfigService();
     const chains = service.getAllActiveChains();
@@ -49,7 +52,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
     // invalid chain has no configuration
 
     const service = new ChainConfigService();
@@ -68,7 +71,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
 
     const service2 = new ChainConfigService();
     const chains = service2.getAllActiveChains();
@@ -81,11 +84,11 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
     vi.stubEnv('ALCHEMY_URL_SEPOLIA_BASE', 'https://base-sepolia.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_SEPOLIA_BASE', '0x1111111111111111111111111111111111111111');
     vi.stubEnv('CHAIN_ID_SEPOLIA_BASE', '84532');
-    vi.stubEnv('USDC_ADDRESS_SEPOLIA_BASE', '0x2222222222222222222222222222222222222222');
+    vi.stubEnv('TOKENS_SEPOLIA_BASE', sepoliaTokensJson);
 
     const service = new ChainConfigService();
     const testnets = service.getTestnetChains();
@@ -102,7 +105,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
 
     const service = new ChainConfigService();
     const chain = service.getChainConfig('base');
@@ -117,7 +120,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
 
     const service = new ChainConfigService();
     const chain = service.getChainConfig('nonexistent');
@@ -130,7 +133,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
 
     const service = new ChainConfigService();
     const chain = service.getChainConfigById(8453);
@@ -144,7 +147,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
 
     const service = new ChainConfigService();
     
@@ -157,11 +160,11 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
     vi.stubEnv('ALCHEMY_URL_SEPOLIA_BASE', 'https://base-sepolia.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_SEPOLIA_BASE', '0x1111111111111111111111111111111111111111');
     vi.stubEnv('CHAIN_ID_SEPOLIA_BASE', '84532');
-    vi.stubEnv('USDC_ADDRESS_SEPOLIA_BASE', '0x2222222222222222222222222222222222222222');
+    vi.stubEnv('TOKENS_SEPOLIA_BASE', sepoliaTokensJson);
 
     const service = new ChainConfigService();
     
@@ -173,7 +176,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1234567890123456789012345678901234567890');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x0987654321098765432109876543210987654321');
+    vi.stubEnv('TOKENS_BASE', baseTokensJson);
 
     const service = new ChainConfigService();
     expect(service.getChainCount()).toBe(1);
@@ -182,7 +185,7 @@ describe('ChainConfigService', () => {
     vi.stubEnv('ALCHEMY_URL_SEPOLIA_BASE', 'https://base-sepolia.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_SEPOLIA_BASE', '0x1111111111111111111111111111111111111111');
     vi.stubEnv('CHAIN_ID_SEPOLIA_BASE', '84532');
-    vi.stubEnv('USDC_ADDRESS_SEPOLIA_BASE', '0x2222222222222222222222222222222222222222');
+    vi.stubEnv('TOKENS_SEPOLIA_BASE', sepoliaTokensJson);
 
     service.reload();
     expect(service.getChainCount()).toBe(2);
