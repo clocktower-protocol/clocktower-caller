@@ -48,18 +48,21 @@ export class EmailService {
    * @param {string} txHash - Transaction hash
    * @param {string} balanceBeforeEth - ETH balance before
    * @param {string} balanceAfterEth - ETH balance after
-   * @param {string} balanceBeforeUsdc - USDC balance before
-   * @param {string} balanceAfterUsdc - USDC balance after
+   * @param {Array<{ symbol: string, balanceBefore: string, balanceAfter: string }>} tokenBalances - Token balance changes
    * @param {number} recursionDepth - Recursion depth
    * @returns {Promise<Object|null>} Email result or null if not configured
    */
-  async sendSuccessEmail(chainDisplayName, txHash, balanceBeforeEth, balanceAfterEth, balanceBeforeUsdc, balanceAfterUsdc, recursionDepth) {
+  async sendSuccessEmail(chainDisplayName, txHash, balanceBeforeEth, balanceAfterEth, tokenBalances, recursionDepth) {
     if (!this.isConfigured) {
       this.logger.info('Email configuration not available, skipping success email notification');
       return null;
     }
 
     try {
+      const tokenBalanceLines = (tokenBalances || []).map(
+        t => `<p><strong>${t.symbol} Balance:</strong> ${t.balanceBefore} → ${t.balanceAfter}</p>`
+      ).join('');
+
       const subject = `✅ Clocktower Remit Success - ${chainDisplayName}`;
       const explorerUrl = this.getExplorerUrl(chainDisplayName, txHash);
       
@@ -78,7 +81,7 @@ export class EmailService {
           <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="color: #166534; margin-top: 0;">Balance Changes</h3>
             <p><strong>ETH Balance:</strong> ${balanceBeforeEth} → ${balanceAfterEth}</p>
-            <p><strong>USDC Balance:</strong> ${balanceBeforeUsdc} → ${balanceAfterUsdc}</p>
+            ${tokenBalanceLines}
           </div>
           
           <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">

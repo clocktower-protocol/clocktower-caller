@@ -258,24 +258,23 @@ export class DatabaseService {
    * @param {number} balanceBefore - Balance before
    * @param {number} balanceAfter - Balance after
    * @param {string} chainName - Chain name
+   * @param {{ symbol?: string, name?: string, decimals?: number }} [options] - Optional token metadata for new tokens
    * @returns {Promise<void>}
    */
-  async logTokenBalance(executionLogId, tokenAddress, balanceBefore, balanceAfter, chainName) {
+  async logTokenBalance(executionLogId, tokenAddress, balanceBefore, balanceAfter, chainName, options = {}) {
     if (!this.isInitialized) {
       throw new Error('Database not initialized');
     }
 
     try {
-      // Get or create token record
       let token = await this.getTokenByAddress(tokenAddress, chainName);
-      
+
       if (!token) {
-        // Insert new token if not exists
         token = await this.createToken({
           token_address: tokenAddress,
-          token_symbol: 'UNKNOWN', // Will be updated when we know the symbol
-          token_name: 'Unknown Token',
-          decimals: 18, // Default, will be updated when we know
+          token_symbol: options.symbol ?? 'UNKNOWN',
+          token_name: options.name ?? 'Unknown Token',
+          decimals: typeof options.decimals === 'number' ? options.decimals : 18,
           chain_name: chainName
         });
       }

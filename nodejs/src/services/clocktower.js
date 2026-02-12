@@ -456,15 +456,19 @@ export class ClocktowerService {
       const balanceBeforeEth = formatEther(balance);
       this.logger.balance(process.env.CALLER_ADDRESS, `ETH Balance Before: ${balanceBeforeEth}`);
 
-      // Get initial USDC balance
-      const usdcBalance = await publicClient.readContract({
-        address: chainConfig.usdcAddress,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [process.env.CALLER_ADDRESS],
-      });
-      const balanceBeforeUsdc = formatUnits(usdcBalance, 6);
-      this.logger.balance(process.env.CALLER_ADDRESS, `USDC Balance Before: ${balanceBeforeUsdc}`);
+      // Get initial token balances
+      const balancesBefore = [];
+      for (const token of chainConfig.tokens) {
+        const raw = await publicClient.readContract({
+          address: token.address,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [process.env.CALLER_ADDRESS],
+        });
+        const formatted = formatUnits(raw, token.decimals);
+        balancesBefore.push({ ...token, balanceBefore: formatted });
+        this.logger.balance(process.env.CALLER_ADDRESS, `${token.symbol} Balance Before: ${formatted}`);
+      }
 
       // Execute transaction
       const txHash = await walletClient.writeContract({
@@ -496,26 +500,6 @@ export class ClocktowerService {
           revertReason = error.message || 'Failed to get revert reason';
         }
         this.logger.transaction(txHash, `Failed: ${revertReason}`);
-        
-        // Send error email for failed transaction (non-blocking)
-        try {
-          await this.email.sendErrorEmail(
-            chainConfig.displayName,
-            `Transaction failed: ${revertReason}`,
-            'Transaction Failure',
-            {
-              'Transaction Hash': txHash,
-              'Transaction Link': this.getExplorerUrl(chainConfig.displayName, txHash),
-              'Recursion Depth': recursionDepth.toString(),
-              'ETH Balance Before': balanceBeforeEth,
-              'ETH Balance After': balanceAfterEth,
-              'USDC Balance Before': balanceBeforeUsdc,
-              'USDC Balance After': balanceAfterUsdc
-            }
-          );
-        } catch (emailError) {
-          this.logger.chain(chainConfig.name, 'Failed to send error email', emailError);
-        }
       }
 
       // Get final ETH balance
@@ -523,15 +507,45 @@ export class ClocktowerService {
       const balanceAfterEth = formatEther(balance2);
       this.logger.balance(process.env.CALLER_ADDRESS, `ETH Balance After: ${balanceAfterEth}`);
 
-      // Get final USDC balance
-      const usdcBalance2 = await publicClient.readContract({
-        address: chainConfig.usdcAddress,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [process.env.CALLER_ADDRESS],
-      });
-      const balanceAfterUsdc = formatUnits(usdcBalance2, 6);
-      this.logger.balance(process.env.CALLER_ADDRESS, `USDC Balance After: ${balanceAfterUsdc}`);
+      // Get final token balances and build tokenBalances for emails/logging
+      const tokenBalances = [];
+      for (let i = 0; i < chainConfig.tokens.length; i++) {
+        const token = chainConfig.tokens[i];
+        const raw2 = await publicClient.readContract({
+          address: token.address,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [process.env.CALLER_ADDRESS],
+        });
+        const balanceAfter = formatUnits(raw2, token.decimals);
+        const balanceBefore = balancesBefore[i]?.balanceBefore ?? '0';
+        tokenBalances.push({ symbol: token.symbol, balanceBefore, balanceAfter });
+        this.logger.balance(process.env.CALLER_ADDRESS, `${token.symbol} Balance After: ${balanceAfter}`);
+      }
+
+      if (txStatus === 0) {
+        try {
+          const errorDetails = {
+            'Transaction Hash': txHash,
+            'Transaction Link': this.getExplorerUrl(chainConfig.displayName, txHash),
+            'Recursion Depth': recursionDepth.toString(),
+            'ETH Balance Before': balanceBeforeEth,
+            'ETH Balance After': balanceAfterEth,
+          };
+          tokenBalances.forEach(t => {
+            errorDetails[`${t.symbol} Balance Before`] = t.balanceBefore;
+            errorDetails[`${t.symbol} Balance After`] = t.balanceAfter;
+          });
+          await this.email.sendErrorEmail(
+            chainConfig.displayName,
+            `Transaction failed: ${revertReason}`,
+            'Transaction Failure',
+            errorDetails
+          );
+        } catch (emailError) {
+          this.logger.chain(chainConfig.name, 'Failed to send error email', emailError);
+        }
+      }
 
       // Log to database (best-effort)
       let executionLogId = null;
@@ -563,24 +577,28 @@ export class ClocktowerService {
 
       // Log token balances
       if (executionLogId) {
-        await this.database.logTokenBalance(
-          executionLogId, 
-          chainConfig.usdcAddress, 
-          parseFloat(balanceBeforeUsdc), 
-          parseFloat(balanceAfterUsdc),
-          chainConfig.name
-        );
+        for (let i = 0; i < chainConfig.tokens.length; i++) {
+          const token = chainConfig.tokens[i];
+          const tb = tokenBalances[i];
+          await this.database.logTokenBalance(
+            executionLogId,
+            token.address,
+            parseFloat(tb.balanceBefore),
+            parseFloat(tb.balanceAfter),
+            chainConfig.name,
+            { symbol: token.symbol, name: token.name, decimals: token.decimals }
+          );
+        }
       }
 
       // Send success email notification
       if (txStatus === 1) {
         await this.email.sendSuccessEmail(
           chainConfig.displayName,
-          txHash, 
-          balanceBeforeEth, 
-          balanceAfterEth, 
-          balanceBeforeUsdc, 
-          balanceAfterUsdc, 
+          txHash,
+          balanceBeforeEth,
+          balanceAfterEth,
+          tokenBalances,
           recursionDepth
         );
       }
