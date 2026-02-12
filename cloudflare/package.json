@@ -1,21 +1,23 @@
 {
-    "name": "clocktower-caller-unified",
-    "version": "1.0.0",
-    "description": "Unified Cloudflare Worker for Clocktower calling across multiple chains",
-    "main": "remit_script.js",
-    "type": "module",
-    "scripts": {
-        "dev": "wrangler dev",
-        "deploy": "wrangler deploy"
-    },
-    "dependencies": {
-        "dayjs": "^1.11.13",
-        "dotenv": "^17.0.0",
-        "resend": "^6.3.0",
-        "viem": "^2.21.1"
-    },
-    "devDependencies": {
-        "wrangler": "^4.16.0"
-    }
+  "name": "clocktower-caller-unified",
+  "version": "1.0.0",
+  "description": "Unified Cloudflare Worker for Clocktower calling across multiple chains",
+  "main": "remit_script.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.13",
+    "dotenv": "^17.0.0",
+    "resend": "^6.3.0",
+    "viem": "^2.21.1"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "wrangler": "^4.16.0"
+  }
 }
-
