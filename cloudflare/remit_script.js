@@ -54,6 +54,9 @@ const erc20Abi = [
 // Maximum recursion depth per cron invocation
 const MAX_RECURSION_DEPTH = 5;
 
+// Chunk size for multicall (avoid RPC/calldata limits)
+const MULTICALL_CHUNK_SIZE = 100;
+
 // Email rate limiter - ensures we don't exceed Resend's 2 requests/second limit
 let lastEmailTimestamp = 0;
 const MIN_EMAIL_INTERVAL_MS = 500; // 500ms = max 2 emails per second
@@ -510,15 +513,8 @@ async function processChain(chainConfig, env, globalExecutionId) {
     }
   }
 
-  async function preCheck(recursiveExecutionId = null, recursionDepth = 0) {
+  async function preCheck(publicClient, recursiveExecutionId = null, recursionDepth = 0) {
     try {
-      const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
-
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
-
       // Get current day
       const currentTime = Math.floor(Date.now() / 1000); // Convert to seconds
       const currentDay = Math.floor(currentTime / 86400);
@@ -547,7 +543,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
       
       console.log(`[${chainConfig.chainName}] PreCheck - Need to check days from ${nextUncheckedDay} to ${currentDay}`);
       
-      const { shouldProceed, totalSubscriptions } = await checksubs(nextUncheckedDay, currentDay);
+      const { shouldProceed, totalSubscriptions } = await checksubs(publicClient, nextUncheckedDay, currentDay);
       console.log(`[${chainConfig.chainName}] PreCheck - Should proceed: ${shouldProceed}, total subscriptions: ${totalSubscriptions}`);
       
       // Log precheck results to database
@@ -605,108 +601,90 @@ async function processChain(chainConfig, env, globalExecutionId) {
     }
   }
 
-  async function checksubs(nextUncheckedDay, currentDay) {
+  async function checksubs(publicClient, nextUncheckedDay, currentDay) {
+    const ZERO_ID = '0x0000000000000000000000000000000000000000000000000000000000000000';
     try {
-      const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
-
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
-
       console.log(`[${chainConfig.chainName}] Checksubs - Using current day: ${currentDay}`);
-      
-      // Convert BigInt to number for comparison
       const nextUncheckedDayNum = Number(nextUncheckedDay);
-      let totalSubscriptions = 0;
 
+      // Build list of getIdByTime calls (same day/frequency logic as before)
+      const contracts = [];
       for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
-        const iUnix = i * 86400; // Convert to Unix epoch time
-        const checkDay = dayjs.utc(iUnix * 1000); // Convert to dayjs UTC object (multiply by 1000 for milliseconds)
-
-        //converts day to dueDay by frequency
-        const dayOfWeek = checkDay.day() === 0 ? 7 : checkDay.day(); // Convert Sunday from 0 to 7
-        const dayOfMonth = checkDay.date(); // 1-31
-        
-        // Calculate day of quarter (1-92) - manually find quarter start
-        const month = checkDay.month(); // 0-11
-        const quarter = Math.floor(month / 3); // 0, 1, 2, 3
-        const quarterStartMonth = quarter * 3; // 0, 3, 6, 9
+        const iUnix = i * 86400;
+        const checkDay = dayjs.utc(iUnix * 1000);
+        const dayOfWeek = checkDay.day() === 0 ? 7 : checkDay.day();
+        const dayOfMonth = checkDay.date();
+        const month = checkDay.month();
+        const quarter = Math.floor(month / 3);
+        const quarterStartMonth = quarter * 3;
         const quarterStart = dayjs.utc().year(checkDay.year()).month(quarterStartMonth).date(1);
         const dayOfQuarter = checkDay.diff(quarterStart, 'day') + 1;
-        
-        const dayOfYear = checkDay.diff(checkDay.startOf('year'), 'day') + 1; // 1-366
-        
-        console.log(`[${chainConfig.chainName}] Day ${i}: ${checkDay.format('YYYY-MM-DD')}, Day of quarter: ${dayOfQuarter}`);
+        const dayOfYear = checkDay.diff(checkDay.startOf('year'), 'day') + 1;
 
-        // Loop through frequencies 0-3
         for (let frequency = 0; frequency <= 3; frequency++) {
           let dueDay;
           let shouldSkipFrequency = false;
-          
-          // Map frequency to appropriate day type and validate
           switch (frequency) {
-            case 0: // Weekly
+            case 0:
               dueDay = dayOfWeek;
               break;
-            case 1: // Monthly
-              if (dayOfMonth > 28) {
-                console.log(`[${chainConfig.chainName}] Day of month (${dayOfMonth}) exceeds limit of 28, skipping monthly frequency`);
-                shouldSkipFrequency = true;
-              } else {
-                dueDay = dayOfMonth;
-              }
+            case 1:
+              if (dayOfMonth > 28) shouldSkipFrequency = true;
+              else dueDay = dayOfMonth;
               break;
-            case 2: // Quarterly
-              if (dayOfQuarter <= 0 || dayOfQuarter > 90) {
-                console.log(`[${chainConfig.chainName}] Day of quarter (${dayOfQuarter}) is invalid or exceeds limit of 90, skipping quarterly frequency`);
-                shouldSkipFrequency = true;
-              } else {
-                dueDay = dayOfQuarter;
-              }
+            case 2:
+              if (dayOfQuarter <= 0 || dayOfQuarter > 90) shouldSkipFrequency = true;
+              else dueDay = dayOfQuarter;
               break;
-            case 3: // Yearly
-              if (dayOfYear <= 0 || dayOfYear > 365) {
-                console.log(`[${chainConfig.chainName}] Day of year (${dayOfYear}) is invalid or exceeds limit of 365, skipping yearly frequency`);
-                shouldSkipFrequency = true;
-              } else {
-                dueDay = dayOfYear;
-              }
+            case 3:
+              if (dayOfYear <= 0 || dayOfYear > 365) shouldSkipFrequency = true;
+              else dueDay = dayOfYear;
               break;
           }
-          
-          // Skip this frequency if validation failed
-          if (shouldSkipFrequency) {
-            continue;
-          }
-          
-          console.log(`[${chainConfig.chainName}] Checking frequency ${frequency} (${frequency === 0 ? 'weekly' : frequency === 1 ? 'monthly' : frequency === 2 ? 'quarterly' : 'yearly'}) for dueDay ${dueDay}`);
-          
-          // Call getIdByTime function (single pass: used for both shouldProceed and totalSubscriptions)
-          const idArray = await publicClient.readContract({
+          if (shouldSkipFrequency) continue;
+          contracts.push({
             address: chainConfig.clocktowerAddress,
             abi,
             functionName: 'getIdByTime',
             args: [frequency, dueDay],
           });
-          
-          console.log(`[${chainConfig.chainName}] Frequency ${frequency} returned ${idArray.length} IDs:`, idArray);
-          
-          // Count non-zero IDs (active subscriptions)
+        }
+      }
+
+      if (contracts.length === 0) {
+        console.log(`[${chainConfig.chainName}] No getIdByTime calls to make`);
+        return { shouldProceed: false, totalSubscriptions: 0 };
+      }
+
+      // Run multicall in chunks
+      const allResults = [];
+      for (let offset = 0; offset < contracts.length; offset += MULTICALL_CHUNK_SIZE) {
+        const chunk = contracts.slice(offset, offset + MULTICALL_CHUNK_SIZE);
+        const results = await publicClient.multicall({
+          contracts: chunk,
+          allowFailure: true,
+        });
+        allResults.push(...results);
+      }
+
+      let totalSubscriptions = 0;
+      for (let idx = 0; idx < allResults.length; idx++) {
+        const item = allResults[idx];
+        if (item.status === 'success' && item.result) {
+          const idArray = item.result;
           for (const id of idArray) {
-            if (id !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-              console.log(`[${chainConfig.chainName}] Found non-zero ID: ${id} at frequency ${frequency}`);
+            if (id !== ZERO_ID) {
               totalSubscriptions++;
             }
           }
         }
       }
-      
+
       const shouldProceed = totalSubscriptions > 0;
       if (!shouldProceed) {
         console.log(`[${chainConfig.chainName}] No non-zero IDs found for checked range`);
       }
-      console.log(`[${chainConfig.chainName}] Total subscriptions found: ${totalSubscriptions}`);
+      console.log(`[${chainConfig.chainName}] Total subscriptions found: ${totalSubscriptions} (${contracts.length} getIdByTime calls via multicall)`);
       return { shouldProceed, totalSubscriptions };
     } catch (error) {
       console.error(`[${chainConfig.chainName}] Checksubs Error:`, error.message);
@@ -714,20 +692,9 @@ async function processChain(chainConfig, env, globalExecutionId) {
     }
   }
 
-  async function desmond(recursionDepth = 0, maxAllowedRecursions = MAX_RECURSION_DEPTH) {
-    // Generate unique execution ID for each recursive call
+  async function desmond(publicClient, recursionDepth = 0, maxAllowedRecursions = MAX_RECURSION_DEPTH) {
     const recursiveExecutionId = `${executionId}_recursion_${recursionDepth}`;
-    
     try {
-      const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
-
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
-
-      // Note: maxAllowedRecursions already accounts for MAX_RECURSION_DEPTH limit
-
       console.log(`[${chainConfig.chainName}] Recursion depth: ${recursionDepth + 1}`);
 
       const walletClient = createWalletClient({
@@ -871,7 +838,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
       if (txStatus === 1) {
         if (recursionDepth + 1 < maxAllowedRecursions) {
           console.log(`[${chainConfig.chainName}] Recursion ${recursionDepth + 1}/${maxAllowedRecursions}, recursing...`);
-          await desmond(recursionDepth + 1, maxAllowedRecursions);
+          await desmond(publicClient, recursionDepth + 1, maxAllowedRecursions);
         } else {
           console.log(`[${chainConfig.chainName}] Reached expected recursion limit (${maxAllowedRecursions}), stopping`);
         }
@@ -910,18 +877,18 @@ async function processChain(chainConfig, env, globalExecutionId) {
     }
   }
 
+  // Single publicClient for all RPC reads in this chain
+  const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
+  const publicClient = createPublicClient({
+    chain: { id: chainConfig.chainId },
+    transport: http(url),
+  });
+
   // Run preCheck first, then desmond if preCheck passes
-  const preCheckResult = await preCheck();
+  const preCheckResult = await preCheck(publicClient);
   console.log(`[${chainConfig.chainName}] shouldProceed: ${preCheckResult.shouldProceed}`);
   if (preCheckResult.shouldProceed) {
     const totalSubscriptions = preCheckResult.totalSubscriptions;
-    
-    // Get maxRemits limit
-    const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
-    const publicClient = createPublicClient({
-      chain: { id: chainConfig.chainId },
-      transport: http(url),
-    });
     
     const maxRemits = await publicClient.readContract({
       address: chainConfig.clocktowerAddress,
@@ -936,8 +903,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
     console.log(`[${chainConfig.chainName}] Starting with ${totalSubscriptions} subscriptions, maxRemits: ${maxRemits}`);
     console.log(`[${chainConfig.chainName}] Expected recursions: ${expectedRecursions}, max allowed: ${maxAllowedRecursions}`);
     
-    // Pass the max allowed recursions to desmond
-    await desmond(0, maxAllowedRecursions);
+    await desmond(publicClient, 0, maxAllowedRecursions);
     console.log(`[${chainConfig.chainName}] PreCheck passed, executing desmond`);
   } else {
     console.log(`[${chainConfig.chainName}] PreCheck failed, skipping desmond execution`);
