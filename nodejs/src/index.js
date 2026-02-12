@@ -97,11 +97,11 @@ class ClocktowerCaller {
           `ALCHEMY_URL_${normalizedName}`,
           `CLOCKTOWER_ADDRESS_${normalizedName}`,
           `CHAIN_ID_${normalizedName}`,
-          `USDC_ADDRESS_${normalizedName}`
+          `TOKENS_${normalizedName}`
         ];
 
         const chainMissing = chainRequired.filter(key => !process.env[key]);
-        
+
         if (chainMissing.length > 0) {
           errors.push(`Missing required environment variables for chain '${chainName}': ${chainMissing.join(', ')}`);
         }
@@ -112,15 +112,23 @@ class ClocktowerCaller {
           errors.push(`Invalid CHAIN_ID_${normalizedName} format (must be a positive integer)`);
         }
 
-        // Validate contract address formats if provided
+        // Validate contract address format if provided
         const clocktowerAddr = process.env[`CLOCKTOWER_ADDRESS_${normalizedName}`];
         if (clocktowerAddr && !clocktowerAddr.match(/^0x[a-fA-F0-9]{40}$/)) {
           errors.push(`Invalid CLOCKTOWER_ADDRESS_${normalizedName} format (must be a valid 40-character hex address)`);
         }
 
-        const usdcAddr = process.env[`USDC_ADDRESS_${normalizedName}`];
-        if (usdcAddr && !usdcAddr.match(/^0x[a-fA-F0-9]{40}$/)) {
-          errors.push(`Invalid USDC_ADDRESS_${normalizedName} format (must be a valid 40-character hex address)`);
+        // Validate TOKENS_* is valid JSON array with at least one token
+        const tokensRaw = process.env[`TOKENS_${normalizedName}`];
+        if (tokensRaw) {
+          try {
+            const arr = JSON.parse(tokensRaw);
+            if (!Array.isArray(arr) || arr.length === 0) {
+              errors.push(`Invalid TOKENS_${normalizedName} format (must be a non-empty JSON array of token objects)`);
+            }
+          } catch (_) {
+            errors.push(`Invalid TOKENS_${normalizedName} format (must be valid JSON array)`);
+          }
         }
       }
 

@@ -31,50 +31,27 @@ describe('parseTokensForChain', () => {
     expect(result[0].decimals).toBe(18);
   });
 
-  it('falls back to single USDC when TOKENS_* unset and USDC_ADDRESS_* set', () => {
-    const env = {
-      USDC_ADDRESS_BASE: '0x1234567890123456789012345678901234567890'
-    };
-    const result = parseTokensForChain(env, 'BASE');
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
-      address: '0x1234567890123456789012345678901234567890',
-      symbol: 'USDC',
-      name: 'USD Coin',
-      decimals: 6
-    });
-  });
-
-  it('returns empty array when both TOKENS_* and USDC_ADDRESS_* unset', () => {
+  it('returns empty array when TOKENS_* is unset', () => {
     const env = {};
     const result = parseTokensForChain(env, 'BASE');
     expect(result).toEqual([]);
   });
 
-  it('falls back to USDC when TOKENS_* is invalid JSON', () => {
-    const env = {
-      TOKENS_BASE: 'not json',
-      USDC_ADDRESS_BASE: '0xusdc'
-    };
+  it('returns empty array when TOKENS_* is invalid JSON', () => {
+    const env = { TOKENS_BASE: 'not json' };
     const result = parseTokensForChain(env, 'BASE');
-    expect(result).toHaveLength(1);
-    expect(result[0].symbol).toBe('USDC');
-    expect(result[0].address).toBe('0xusdc');
+    expect(result).toEqual([]);
   });
 
-  it('falls back to USDC when TOKENS_* is empty array', () => {
-    const env = {
-      TOKENS_BASE: '[]',
-      USDC_ADDRESS_BASE: '0xusdc'
-    };
+  it('returns empty array when TOKENS_* is empty array', () => {
+    const env = { TOKENS_BASE: '[]' };
     const result = parseTokensForChain(env, 'BASE');
-    expect(result).toHaveLength(1);
-    expect(result[0].symbol).toBe('USDC');
+    expect(result).toEqual([]);
   });
 
   it('uses correct env keys for SEPOLIA_BASE chain key', () => {
     const env = {
-      USDC_ADDRESS_SEPOLIA_BASE: '0xsep'
+      TOKENS_SEPOLIA_BASE: JSON.stringify([{ address: '0xsep', symbol: 'USDC', name: 'USD Coin', decimals: 6 }])
     };
     const result = parseTokensForChain(env, 'SEPOLIA_BASE');
     expect(result).toHaveLength(1);
@@ -87,7 +64,7 @@ describe('getChainConfigs', () => {
   it('returns one enabled chain when only Base has clocktower and tokens', () => {
     const env = {
       CLOCKTOWER_ADDRESS_BASE: '0xclock',
-      USDC_ADDRESS_BASE: '0xusdc',
+      TOKENS_BASE: JSON.stringify([{ address: '0xusdc', symbol: 'USDC', name: 'USD Coin', decimals: 6 }]),
       CHAIN_ID_BASE: '8453'
     };
     const configs = getChainConfigs(env);
@@ -102,10 +79,10 @@ describe('getChainConfigs', () => {
   it('returns two chains when both Base and Sepolia configured', () => {
     const env = {
       CLOCKTOWER_ADDRESS_BASE: '0xc1',
-      USDC_ADDRESS_BASE: '0xu1',
+      TOKENS_BASE: JSON.stringify([{ address: '0xu1', symbol: 'USDC', name: 'USD Coin', decimals: 6 }]),
       CHAIN_ID_BASE: '8453',
       CLOCKTOWER_ADDRESS_SEPOLIA_BASE: '0xc2',
-      USDC_ADDRESS_SEPOLIA_BASE: '0xu2',
+      TOKENS_SEPOLIA_BASE: JSON.stringify([{ address: '0xu2', symbol: 'USDC', name: 'USD Coin', decimals: 6 }]),
       CHAIN_ID_SEPOLIA_BASE: '84532'
     };
     const configs = getChainConfigs(env);
@@ -136,7 +113,7 @@ describe('getChainConfigs', () => {
   it('returns empty array when no chains have both clocktower and tokens', () => {
     const env = {
       CLOCKTOWER_ADDRESS_BASE: '0xclock'
-      // no USDC_ADDRESS_BASE or TOKENS_BASE
+      // no TOKENS_BASE
     };
     const configs = getChainConfigs(env);
     expect(configs).toHaveLength(0);
@@ -145,10 +122,10 @@ describe('getChainConfigs', () => {
   it('filters out Sepolia when Sepolia has no tokens', () => {
     const env = {
       CLOCKTOWER_ADDRESS_BASE: '0xc1',
-      USDC_ADDRESS_BASE: '0xu1',
+      TOKENS_BASE: JSON.stringify([{ address: '0xu1', symbol: 'USDC', decimals: 6 }]),
       CHAIN_ID_BASE: '8453',
       CLOCKTOWER_ADDRESS_SEPOLIA_BASE: '0xc2'
-      // no USDC_ADDRESS_SEPOLIA_BASE or TOKENS_SEPOLIA_BASE
+      // no TOKENS_SEPOLIA_BASE
     };
     const configs = getChainConfigs(env);
     expect(configs).toHaveLength(1);
@@ -158,7 +135,7 @@ describe('getChainConfigs', () => {
   it('uses default chainId and alchemyUrl for Base when not set', () => {
     const env = {
       CLOCKTOWER_ADDRESS_BASE: '0xclock',
-      USDC_ADDRESS_BASE: '0xusdc'
+      TOKENS_BASE: JSON.stringify([{ address: '0xusdc', symbol: 'USDC', decimals: 6 }])
     };
     const configs = getChainConfigs(env);
     expect(configs[0].chainId).toBe(8453);

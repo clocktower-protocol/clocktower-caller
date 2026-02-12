@@ -62,7 +62,7 @@ describe('Services Integration Tests', () => {
     vi.stubEnv('ALCHEMY_URL_BASE', 'https://base-mainnet.g.alchemy.com/v2/');
     vi.stubEnv('CLOCKTOWER_ADDRESS_BASE', '0x1111111111111111111111111111111111111111');
     vi.stubEnv('CHAIN_ID_BASE', '8453');
-    vi.stubEnv('USDC_ADDRESS_BASE', '0x2222222222222222222222222222222222222222');
+    vi.stubEnv('TOKENS_BASE', JSON.stringify([{ address: '0x2222222222222222222222222222222222222222', symbol: 'USDC', name: 'USD Coin', decimals: 6 }]));
 
     database = new DatabaseService();
     await database.initialize();
@@ -170,7 +170,7 @@ describe('Services Integration Tests', () => {
       vi.stubEnv('ALCHEMY_URL_SEPOLIA_BASE', 'https://base-sepolia.g.alchemy.com/v2/');
       vi.stubEnv('CLOCKTOWER_ADDRESS_SEPOLIA_BASE', '0x3333333333333333333333333333333333333333');
       vi.stubEnv('CHAIN_ID_SEPOLIA_BASE', '84532');
-      vi.stubEnv('USDC_ADDRESS_SEPOLIA_BASE', '0x4444444444444444444444444444444444444444');
+      vi.stubEnv('TOKENS_SEPOLIA_BASE', JSON.stringify([{ address: '0x4444444444444444444444444444444444444444', symbol: 'USDC', name: 'USD Coin', decimals: 6 }]));
       
       chainConfig = new ChainConfigService();
     });
