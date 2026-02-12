@@ -537,7 +537,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
       // If current day is less than next unchecked day, we're up to date and don't need to proceed
       if(currentDay < nextUncheckedDay) {
         console.log(`[${chainConfig.chainName}] PreCheck - Up to date: current day (${currentDay}) < next unchecked day (${nextUncheckedDay})`);
-        return { shouldProceed: false, currentDay, nextUncheckedDay: Number(nextUncheckedDay) };
+        return { shouldProceed: false, currentDay, nextUncheckedDay: Number(nextUncheckedDay), totalSubscriptions: 0 };
       }
       
       // Additional validation: if nextUncheckedDay is significantly in the future, something might be wrong
@@ -547,8 +547,8 @@ async function processChain(chainConfig, env, globalExecutionId) {
       
       console.log(`[${chainConfig.chainName}] PreCheck - Need to check days from ${nextUncheckedDay} to ${currentDay}`);
       
-      const shouldProceed = await checksubs(nextUncheckedDay, currentDay);
-      console.log(`[${chainConfig.chainName}] PreCheck - Should proceed: ${shouldProceed}`);
+      const { shouldProceed, totalSubscriptions } = await checksubs(nextUncheckedDay, currentDay);
+      console.log(`[${chainConfig.chainName}] PreCheck - Should proceed: ${shouldProceed}, total subscriptions: ${totalSubscriptions}`);
       
       // Log precheck results to database
       await logToDatabase({
@@ -569,7 +569,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
         execution_time_ms: Date.now() - startTime
       });
       
-      return { shouldProceed, currentDay, nextUncheckedDay: Number(nextUncheckedDay) };
+      return { shouldProceed, currentDay, nextUncheckedDay: Number(nextUncheckedDay), totalSubscriptions };
     } catch (error) {
       // Log precheck error to database
       await logToDatabase({
@@ -601,7 +601,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
         }
       );
       
-      return { shouldProceed: false, currentDay: null, nextUncheckedDay: null };
+      return { shouldProceed: false, currentDay: null, nextUncheckedDay: null, totalSubscriptions: 0 };
     }
   }
 
@@ -618,6 +618,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
       
       // Convert BigInt to number for comparison
       const nextUncheckedDayNum = Number(nextUncheckedDay);
+      let totalSubscriptions = 0;
 
       for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
         const iUnix = i * 86400; // Convert to Unix epoch time
@@ -681,7 +682,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
           
           console.log(`[${chainConfig.chainName}] Checking frequency ${frequency} (${frequency === 0 ? 'weekly' : frequency === 1 ? 'monthly' : frequency === 2 ? 'quarterly' : 'yearly'}) for dueDay ${dueDay}`);
           
-          // Call getIdByTime function
+          // Call getIdByTime function (single pass: used for both shouldProceed and totalSubscriptions)
           const idArray = await publicClient.readContract({
             address: chainConfig.clocktowerAddress,
             abi,
@@ -691,119 +692,25 @@ async function processChain(chainConfig, env, globalExecutionId) {
           
           console.log(`[${chainConfig.chainName}] Frequency ${frequency} returned ${idArray.length} IDs:`, idArray);
           
-          // Check if any ID in the array is non-zero
-          for (const id of idArray) {
-            if (id !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-              console.log(`[${chainConfig.chainName}] Found non-zero ID: ${id} at frequency ${frequency}`);
-              return true;
-            }
-          }
-        }
-        
-        console.log(`[${chainConfig.chainName}] No non-zero IDs found for day ${i}`);
-      }
-      
-      console.log(`[${chainConfig.chainName}] No non-zero IDs found for checked range`);
-      return false;
-    } catch (error) {
-      console.error(`[${chainConfig.chainName}] Checksubs Error:`, error.message);
-      return false;
-    }
-  }
-
-  async function countTotalSubscriptions(nextUncheckedDay, currentDay) {
-    try {
-      const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
-
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
-
-      console.log(`[${chainConfig.chainName}] CountTotalSubscriptions - Using current day: ${currentDay}`);
-
-      let totalCount = 0;
-      const nextUncheckedDayNum = Number(nextUncheckedDay);
-
-      for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
-        const iUnix = i * 86400; // Convert to Unix epoch time
-        const checkDay = dayjs.utc(iUnix * 1000); // Convert to dayjs UTC object (multiply by 1000 for milliseconds)
-
-        //converts day to dueDay by frequency
-        const dayOfWeek = checkDay.day() === 0 ? 7 : checkDay.day(); // Convert Sunday from 0 to 7
-        const dayOfMonth = checkDay.date(); // 1-31
-        
-        // Calculate day of quarter (1-92) - manually find quarter start
-        const month = checkDay.month(); // 0-11
-        const quarter = Math.floor(month / 3); // 0, 1, 2, 3
-        const quarterStartMonth = quarter * 3; // 0, 3, 6, 9
-        const quarterStart = dayjs.utc().year(checkDay.year()).month(quarterStartMonth).date(1);
-        const dayOfQuarter = checkDay.diff(quarterStart, 'day') + 1;
-        
-        const dayOfYear = checkDay.diff(checkDay.startOf('year'), 'day') + 1; // 1-366
-        
-        console.log(`[${chainConfig.chainName}] Day ${i}: ${checkDay.format('YYYY-MM-DD')}, Day of quarter: ${dayOfQuarter}`);
-
-        // Loop through frequencies 0-3
-        for (let frequency = 0; frequency <= 3; frequency++) {
-          let dueDay;
-          let shouldSkipFrequency = false;
-          
-          // Map frequency to appropriate day type and validate
-          switch (frequency) {
-            case 0: // Weekly
-              dueDay = dayOfWeek;
-              break;
-            case 1: // Monthly
-              if (dayOfMonth > 28) {
-                shouldSkipFrequency = true;
-              } else {
-                dueDay = dayOfMonth;
-              }
-              break;
-            case 2: // Quarterly
-              if (dayOfQuarter <= 0 || dayOfQuarter > 90) {
-                shouldSkipFrequency = true;
-              } else {
-                dueDay = dayOfQuarter;
-              }
-              break;
-            case 3: // Yearly
-              if (dayOfYear <= 0 || dayOfYear > 365) {
-                shouldSkipFrequency = true;
-              } else {
-                dueDay = dayOfYear;
-              }
-              break;
-          }
-          
-          // Skip this frequency if validation failed
-          if (shouldSkipFrequency) {
-            continue;
-          }
-          
-          // Call getIdByTime function
-          const idArray = await publicClient.readContract({
-            address: chainConfig.clocktowerAddress,
-            abi,
-            functionName: 'getIdByTime',
-            args: [frequency, dueDay],
-          });
-          
           // Count non-zero IDs (active subscriptions)
           for (const id of idArray) {
             if (id !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-              totalCount++;
+              console.log(`[${chainConfig.chainName}] Found non-zero ID: ${id} at frequency ${frequency}`);
+              totalSubscriptions++;
             }
           }
         }
       }
       
-      console.log(`[${chainConfig.chainName}] Total subscriptions found: ${totalCount}`);
-      return totalCount;
+      const shouldProceed = totalSubscriptions > 0;
+      if (!shouldProceed) {
+        console.log(`[${chainConfig.chainName}] No non-zero IDs found for checked range`);
+      }
+      console.log(`[${chainConfig.chainName}] Total subscriptions found: ${totalSubscriptions}`);
+      return { shouldProceed, totalSubscriptions };
     } catch (error) {
-      console.error(`[${chainConfig.chainName}] CountTotalSubscriptions Error:`, error.message);
-      return 0;
+      console.error(`[${chainConfig.chainName}] Checksubs Error:`, error.message);
+      return { shouldProceed: false, totalSubscriptions: 0 };
     }
   }
 
@@ -1007,11 +914,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
   const preCheckResult = await preCheck();
   console.log(`[${chainConfig.chainName}] shouldProceed: ${preCheckResult.shouldProceed}`);
   if (preCheckResult.shouldProceed) {
-    // Count total subscriptions once at the beginning
-    const totalSubscriptions = await countTotalSubscriptions(
-      preCheckResult.nextUncheckedDay, 
-      preCheckResult.currentDay
-    );
+    const totalSubscriptions = preCheckResult.totalSubscriptions;
     
     // Get maxRemits limit
     const url = `${chainConfig.alchemyUrl}${env.ALCHEMY_API_KEY}`;
