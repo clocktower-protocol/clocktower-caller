@@ -6,26 +6,19 @@ This repository contains implementations for the Clocktower Protocol, designed t
 
 The repository contains multiple implementations:
 
-### 🎯 [Node.js Multi-Chain Caller](./clocktower-caller-nodejs/) (Recommended)
+### 🎯 [Node.js Multi-Chain Caller](./nodejs/) (Recommended)
 - **Unified solution** for executing remit transactions across multiple chains
 - Supports Base, Ethereum, Arbitrum, Polygon, and other EVM-compatible chains
 - Configuration-driven: add new chains without code changes
 - Flexible database support (SQLite for development, PostgreSQL for production)
 - Comprehensive logging and email notifications
 - Designed for system cron scheduling
-- **[View Documentation →](./clocktower-caller-nodejs/README.md)**
+- **[View Documentation →](./nodejs/README.md)**
 
-### 🚀 [Base Mainnet Caller](./clocktower-base-caller/) (Cloudflare Worker)
-- Executes the `remit` function on Base mainnet
-- Includes email notifications for both success and no-subscription scenarios
-- Full database logging and analytics via Cloudflare D1
-- **[View Documentation →](./clocktower-base-caller/README.md)**
-
-### 🧪 [Base Sepolia Testnet Caller](./clocktower-sepolia-base-caller/) (Cloudflare Worker)
-- Executes the `remit` function on Base Sepolia testnet
-- Includes email notifications for both success and no-subscription scenarios
-- Full database logging and analytics via Cloudflare D1
-- **[View Documentation →](./clocktower-sepolia-base-caller/README.md)**
+### ☁️ [Cloudflare Worker](./cloudflare/) (Multi-Chain)
+- Unified worker for Base mainnet and Base Sepolia testnet
+- Executes the `remit` function with email notifications and D1 database logging
+- **[View Documentation →](./cloudflare/README.md)**
 
 ## Key Features
 
@@ -53,11 +46,11 @@ The Node.js implementation is the recommended approach for new deployments:
 
 1. **Navigate to the Node.js directory:**
    ```bash
-   cd clocktower-caller-nodejs
+   cd nodejs
    ```
 
 2. **Follow the setup guide:**
-   - See the [Node.js README](./clocktower-caller-nodejs/README.md) for detailed instructions
+   - See the [Node.js README](./nodejs/README.md) for detailed instructions
    - Supports multiple chains with a single configuration
    - Works with SQLite (development) or PostgreSQL (production)
 
@@ -69,13 +62,14 @@ The Node.js implementation is the recommended approach for new deployments:
 
 For Cloudflare Workers deployments:
 
-1. **Choose your target network:**
-   - For **production**: Use [Base Mainnet Caller](./clocktower-base-caller/)
-   - For **testing**: Use [Base Sepolia Testnet Caller](./clocktower-sepolia-base-caller/)
+1. **Navigate to the Cloudflare directory:**
+   ```bash
+   cd cloudflare
+   ```
 
-2. **Follow the specific documentation:**
-   - Each worker has its own detailed README with setup instructions
-   - Environment variables and configuration details are documented per worker
+2. **Follow the documentation:**
+   - See the [Cloudflare README](./cloudflare/README.md) for setup, environment variables, and configuration
+   - The unified worker supports both Base mainnet (production) and Base Sepolia (testing)
 
 3. **Deploy to Cloudflare Workers:**
    - Configure environment variables
@@ -86,7 +80,7 @@ For Cloudflare Workers deployments:
 
 ```
 clocktower-caller/
-├── clocktower-caller-nodejs/        # Node.js multi-chain implementation (Recommended)
+├── nodejs/                          # Node.js multi-chain implementation (Recommended)
 │   ├── README.md                   # Node.js documentation
 │   ├── MIGRATION.md                # Migration guide from Workers
 │   ├── src/                        # Source code
@@ -98,29 +92,20 @@ clocktower-caller/
 │   ├── test/                       # Test suite
 │   ├── database/                   # Database schema
 │   └── package.json                # Dependencies
-├── clocktower-base-caller/          # Base mainnet worker (Cloudflare)
-│   ├── README.md                   # Mainnet-specific documentation
+├── cloudflare/                      # Unified Cloudflare Worker (Base mainnet + Sepolia)
+│   ├── README.md                   # Worker documentation
 │   ├── remit_script.js             # Main worker script
 │   ├── package.json                # Dependencies
 │   └── wrangler.jsonc              # Worker configuration
-├── clocktower-sepolia-base-caller/  # Base Sepolia testnet worker (Cloudflare)
-│   ├── README.md                   # Testnet-specific documentation
-│   ├── remit_script.js             # Main worker script
-│   ├── package.json                # Dependencies
-│   ├── wrangler.jsonc              # Worker configuration
-│   ├── checkWalletbalance.js       # Utility scripts
-│   ├── createWallet.js
-│   └── schema.sql                  # Database schema
 ├── database-schema.md              # Database documentation
 └── README.md                       # This overview file
 ```
 
 ## Documentation
 
-- **[Node.js Multi-Chain Caller Documentation](./clocktower-caller-nodejs/README.md)** (Recommended)
-- **[Migration Guide from Cloudflare Workers](./clocktower-caller-nodejs/MIGRATION.md)**
-- **[Base Mainnet Caller Documentation](./clocktower-base-caller/README.md)** (Cloudflare Worker)
-- **[Base Sepolia Testnet Caller Documentation](./clocktower-sepolia-base-caller/README.md)** (Cloudflare Worker)
+- **[Node.js Multi-Chain Caller Documentation](./nodejs/README.md)** (Recommended)
+- **[Migration Guide from Cloudflare Workers](./nodejs/MIGRATION.md)**
+- **[Cloudflare Worker Documentation](./cloudflare/README.md)** (Base mainnet + Sepolia)
 - **[Database Schema Documentation](./database-schema.md)**
 
 ## Security
