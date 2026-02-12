@@ -8,6 +8,7 @@ import { EmailService } from '../../src/services/email.js';
 vi.mock('viem', () => {
   const mockPublicClient = {
     readContract: vi.fn(),
+    multicall: vi.fn((opts) => Promise.resolve((opts?.contracts ?? []).map(() => ({ status: 'success', result: [] })))),
     getBalance: vi.fn(),
     waitForTransactionReceipt: vi.fn(),
     getTransaction: vi.fn(),
