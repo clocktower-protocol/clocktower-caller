@@ -200,6 +200,8 @@ function getChainConfigs(env) {
   ].filter(config => config.enabled);
 }
 
+export { parseTokensForChain, getChainConfigs };
+
 export default {
   async scheduled(event, env, ctx) {
     const globalExecutionId = `exec_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
