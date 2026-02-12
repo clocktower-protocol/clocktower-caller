@@ -25,8 +25,11 @@ import {
   generateExecutionId,
   MAX_RECURSION_DEPTH,
   GAS_LIMIT,
-  ZERO_HASH
+  ZERO_HASH,
+  MULTICALL3_ADDRESS
 } from '../utils/helpers.js';
+
+const MULTICALL_CHUNK_SIZE = 100;
 
 dayjs.extend(utc);
 
@@ -106,13 +109,17 @@ export class ClocktowerService {
     try {
       this.logger.chain(chainConfig.name, `Starting execution: ${executionId}`);
 
-      // Pre-check for this specific chain
-      const preCheckResult = await this.preCheck(chainConfig, executionId, startTime);
+      const url = `${chainConfig.alchemyUrl}${process.env.ALCHEMY_API_KEY}`;
+      const publicClient = createPublicClient({
+        chain: { id: chainConfig.chainId },
+        transport: http(url),
+      });
+
+      const preCheckResult = await this.preCheck(chainConfig, publicClient, executionId, startTime);
       
       if (!preCheckResult.shouldProceed) {
         this.logger.chain(chainConfig.name, 'No subscriptions found, skipping execution');
 
-        // Best-effort notification; do NOT fail the chain if email fails
         try {
           await this.email.sendNoSubscriptionsEmail(
             chainConfig.displayName,
@@ -126,25 +133,17 @@ export class ClocktowerService {
         return { success: true, status: 'no_subscriptions', txCount: 0 };
       }
 
-      // Count total subscriptions
-      const totalSubscriptions = await this.countTotalSubscriptions(
-        chainConfig,
-        preCheckResult.nextUncheckedDay, 
-        preCheckResult.currentDay
-      );
+      const totalSubscriptions = preCheckResult.totalSubscriptions;
 
-      // Get maxRemits limit
-      const maxRemits = await this.getMaxRemits(chainConfig);
+      const maxRemits = await this.getMaxRemits(chainConfig, publicClient);
       
-      // Calculate expected recursions
       const expectedRecursions = Math.ceil(totalSubscriptions / Number(maxRemits));
       const maxAllowedRecursions = Math.min(expectedRecursions, this.maxRecursionDepth);
       
       this.logger.chain(chainConfig.name, `Starting with ${totalSubscriptions} subscriptions, maxRemits: ${maxRemits}`);
       this.logger.chain(chainConfig.name, `Expected recursions: ${expectedRecursions}, max allowed: ${maxAllowedRecursions}`);
 
-      // Execute remit transactions
-      const txCount = await this.desmond(chainConfig, executionId, startTime, 0, maxAllowedRecursions);
+      const txCount = await this.desmond(chainConfig, publicClient, executionId, startTime, 0, maxAllowedRecursions);
       
       this.logger.chain(chainConfig.name, `Execution completed successfully: ${executionId}`);
       return { success: true, status: txCount > 0 ? 'executed' : 'no_subscriptions', txCount };
@@ -157,20 +156,13 @@ export class ClocktowerService {
   /**
    * Pre-check to determine if remit should proceed
    * @param {Object} chainConfig - Chain configuration
+   * @param {Object} publicClient - Viem public client (reused)
    * @param {string} executionId - Execution ID
    * @param {number} startTime - Start time
    * @returns {Promise<Object>} Pre-check result
    */
-  async preCheck(chainConfig, executionId, startTime) {
+  async preCheck(chainConfig, publicClient, executionId, startTime) {
     try {
-      const url = `${chainConfig.alchemyUrl}${process.env.ALCHEMY_API_KEY}`;
-      
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
-
-      // Get current day
       const currentTime = getCurrentTimestamp();
       const currentDay = getCurrentDay();
       
@@ -178,7 +170,6 @@ export class ClocktowerService {
       this.logger.chain(chainConfig.name, `PreCheck - Current day: ${currentDay}`);
       this.logger.chain(chainConfig.name, `PreCheck - Current UTC date: ${new Date().toISOString()}`);
 
-      // Check nextUncheckedDay
       const nextUncheckedDay = await publicClient.readContract({
         address: chainConfig.clocktowerAddress,
         abi: CLOCKTOWER_ABI,
@@ -187,23 +178,20 @@ export class ClocktowerService {
       
       this.logger.chain(chainConfig.name, `PreCheck - Next unchecked day: ${nextUncheckedDay}`);
 
-      // If current day is less than next unchecked day, we're up to date
       if (currentDay < nextUncheckedDay) {
         this.logger.chain(chainConfig.name, `PreCheck - Up to date: current day (${currentDay}) < next unchecked day (${nextUncheckedDay})`);
-        return { shouldProceed: false, currentDay, nextUncheckedDay: Number(nextUncheckedDay) };
+        return { shouldProceed: false, currentDay, nextUncheckedDay: Number(nextUncheckedDay), totalSubscriptions: 0 };
       }
       
-      // Additional validation: if nextUncheckedDay is significantly in the future
       if (nextUncheckedDay > currentDay + 1) {
         this.logger.chain(chainConfig.name, `PreCheck - Warning: nextUncheckedDay (${nextUncheckedDay}) is more than 1 day ahead of current day (${currentDay})`);
       }
       
       this.logger.chain(chainConfig.name, `PreCheck - Need to check days from ${nextUncheckedDay} to ${currentDay}`);
       
-      const shouldProceed = await this.checksubs(chainConfig, nextUncheckedDay, currentDay);
-      this.logger.chain(chainConfig.name, `PreCheck - Should proceed: ${shouldProceed}`);
+      const { shouldProceed, totalSubscriptions } = await this.checksubs(chainConfig, publicClient, nextUncheckedDay, currentDay);
+      this.logger.chain(chainConfig.name, `PreCheck - Should proceed: ${shouldProceed}, total subscriptions: ${totalSubscriptions}`);
       
-      // Log precheck results to database (best-effort)
       try {
         await this.database.logExecution({
         execution_id: executionId,
@@ -230,7 +218,7 @@ export class ClocktowerService {
         this.logger.chain(chainConfig.name, 'PreCheck logging skipped (DB not ready or insert failed)', logError);
       }
       
-      return { shouldProceed, currentDay, nextUncheckedDay: Number(nextUncheckedDay) };
+      return { shouldProceed, currentDay, nextUncheckedDay: Number(nextUncheckedDay), totalSubscriptions };
     } catch (error) {
       this.logger.chain(chainConfig.name, 'PreCheck failed', error);
       
@@ -277,146 +265,82 @@ export class ClocktowerService {
         this.logger.chain(chainConfig.name, 'Failed to send error email', emailError);
       }
       
-      return { shouldProceed: false, currentDay: null, nextUncheckedDay: null };
+      return { shouldProceed: false, currentDay: null, nextUncheckedDay: null, totalSubscriptions: 0 };
     }
   }
 
   /**
-   * Check for active subscriptions
+   * Check for active subscriptions (single pass with multicall; returns shouldProceed and totalSubscriptions)
    * @param {Object} chainConfig - Chain configuration
+   * @param {Object} publicClient - Viem public client (reused)
    * @param {number} nextUncheckedDay - Next unchecked day
    * @param {number} currentDay - Current day
-   * @returns {Promise<boolean>} True if subscriptions found
+   * @returns {Promise<{ shouldProceed: boolean, totalSubscriptions: number }>}
    */
-  async checksubs(chainConfig, nextUncheckedDay, currentDay) {
+  async checksubs(chainConfig, publicClient, nextUncheckedDay, currentDay) {
     try {
-      const url = `${chainConfig.alchemyUrl}${process.env.ALCHEMY_API_KEY}`;
-      
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
-
       this.logger.chain(chainConfig.name, `Checksubs - Using current day: ${currentDay}`);
-      
       const nextUncheckedDayNum = Number(nextUncheckedDay);
 
+      const contracts = [];
       for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
         const checkDay = dayNumberToDayjs(i);
-        
-        this.logger.chain(chainConfig.name, `Day ${i}: ${checkDay.format('YYYY-MM-DD')}`);
-
-        // Loop through frequencies 0-3
         for (let frequency = 0; frequency <= 3; frequency++) {
           const dueDayInfo = getDueDay(frequency, checkDay);
-          
-          if (dueDayInfo.shouldSkip) {
-            this.logger.chain(chainConfig.name, `Skipping frequency ${getFrequencyName(frequency)}: ${dueDayInfo.skipReason}`);
-            continue;
-          }
-          
-          this.logger.chain(chainConfig.name, `Checking frequency ${getFrequencyName(frequency)} for dueDay ${dueDayInfo.dueDay}`);
-          
-          // Call getIdByTime function
-          const idArray = await publicClient.readContract({
+          if (dueDayInfo.shouldSkip) continue;
+          contracts.push({
             address: chainConfig.clocktowerAddress,
             abi: CLOCKTOWER_ABI,
             functionName: 'getIdByTime',
             args: [frequency, dueDayInfo.dueDay],
           });
-          
-          this.logger.chain(chainConfig.name, `Frequency ${getFrequencyName(frequency)} returned ${idArray.length} IDs`);
-          
-          // Check if any ID in the array is non-zero
-          for (const id of idArray) {
-            if (id !== ZERO_HASH) {
-              this.logger.chain(chainConfig.name, `Found non-zero ID: ${id} at frequency ${getFrequencyName(frequency)}`);
-              return true;
-            }
+        }
+      }
+
+      if (contracts.length === 0) {
+        this.logger.chain(chainConfig.name, 'No getIdByTime calls to make');
+        return { shouldProceed: false, totalSubscriptions: 0 };
+      }
+
+      const allResults = [];
+      for (let offset = 0; offset < contracts.length; offset += MULTICALL_CHUNK_SIZE) {
+        const chunk = contracts.slice(offset, offset + MULTICALL_CHUNK_SIZE);
+        const results = await publicClient.multicall({
+          contracts: chunk,
+          allowFailure: true,
+          multicallAddress: MULTICALL3_ADDRESS,
+        });
+        allResults.push(...results);
+      }
+
+      let totalSubscriptions = 0;
+      for (const item of allResults) {
+        if (item.status === 'success' && item.result) {
+          for (const id of item.result) {
+            if (id !== ZERO_HASH) totalSubscriptions++;
           }
         }
-        
-        this.logger.chain(chainConfig.name, `No non-zero IDs found for day ${i}`);
       }
-      
-      this.logger.chain(chainConfig.name, 'No non-zero IDs found for checked range');
-      return false;
+
+      const shouldProceed = totalSubscriptions > 0;
+      if (!shouldProceed) {
+        this.logger.chain(chainConfig.name, 'No non-zero IDs found for checked range');
+      }
+      this.logger.chain(chainConfig.name, `Total subscriptions found: ${totalSubscriptions} (${contracts.length} getIdByTime calls via multicall)`);
+      return { shouldProceed, totalSubscriptions };
     } catch (error) {
       this.logger.chain(chainConfig.name, 'Checksubs Error', error);
-      return false;
-    }
-  }
-
-  /**
-   * Count total subscriptions for a day range
-   * @param {Object} chainConfig - Chain configuration
-   * @param {number} nextUncheckedDay - Next unchecked day
-   * @param {number} currentDay - Current day
-   * @returns {Promise<number>} Total subscription count
-   */
-  async countTotalSubscriptions(chainConfig, nextUncheckedDay, currentDay) {
-    try {
-      const url = `${chainConfig.alchemyUrl}${process.env.ALCHEMY_API_KEY}`;
-      
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
-
-      this.logger.chain(chainConfig.name, `CountTotalSubscriptions - Using current day: ${currentDay}`);
-
-      let totalCount = 0;
-      const nextUncheckedDayNum = Number(nextUncheckedDay);
-
-      for (let i = nextUncheckedDayNum; i <= currentDay; i++) {
-        const checkDay = dayNumberToDayjs(i);
-
-        // Loop through frequencies 0-3
-        for (let frequency = 0; frequency <= 3; frequency++) {
-          const dueDayInfo = getDueDay(frequency, checkDay);
-          
-          if (dueDayInfo.shouldSkip) {
-            continue;
-          }
-          
-          // Call getIdByTime function
-          const idArray = await publicClient.readContract({
-            address: chainConfig.clocktowerAddress,
-            abi: CLOCKTOWER_ABI,
-            functionName: 'getIdByTime',
-            args: [frequency, dueDayInfo.dueDay],
-          });
-          
-          // Count non-zero IDs (active subscriptions)
-          for (const id of idArray) {
-            if (id !== ZERO_HASH) {
-              totalCount++;
-            }
-          }
-        }
-      }
-      
-      this.logger.chain(chainConfig.name, `Total subscriptions found: ${totalCount}`);
-      return totalCount;
-    } catch (error) {
-      this.logger.chain(chainConfig.name, 'CountTotalSubscriptions Error', error);
-      return 0;
+      return { shouldProceed: false, totalSubscriptions: 0 };
     }
   }
 
   /**
    * Get maxRemits limit from contract
    * @param {Object} chainConfig - Chain configuration
+   * @param {Object} publicClient - Viem public client (reused)
    * @returns {Promise<number>} Max remits limit
    */
-  async getMaxRemits(chainConfig) {
-    const url = `${chainConfig.alchemyUrl}${process.env.ALCHEMY_API_KEY}`;
-    
-    const publicClient = createPublicClient({
-      chain: { id: chainConfig.chainId },
-      transport: http(url),
-    });
-    
+  async getMaxRemits(chainConfig, publicClient) {
     return await publicClient.readContract({
       address: chainConfig.clocktowerAddress,
       abi: CLOCKTOWER_ABI,
@@ -427,21 +351,17 @@ export class ClocktowerService {
   /**
    * Execute remit transaction (desmond function)
    * @param {Object} chainConfig - Chain configuration
+   * @param {Object} publicClient - Viem public client (reused)
    * @param {string} executionId - Execution ID
    * @param {number} startTime - Start time
    * @param {number} recursionDepth - Current recursion depth
    * @param {number} maxAllowedRecursions - Maximum allowed recursions
-   * @returns {Promise<void>}
+   * @returns {Promise<number>} Number of successful transactions
    */
-  async desmond(chainConfig, executionId, startTime, recursionDepth = 0, maxAllowedRecursions = this.maxRecursionDepth) {
+  async desmond(chainConfig, publicClient, executionId, startTime, recursionDepth = 0, maxAllowedRecursions = this.maxRecursionDepth) {
     try {
       const recursiveExecutionId = `${executionId}_recursion_${recursionDepth}`;
       const url = `${chainConfig.alchemyUrl}${process.env.ALCHEMY_API_KEY}`;
-
-      const publicClient = createPublicClient({
-        chain: { id: chainConfig.chainId },
-        transport: http(url),
-      });
 
       this.logger.chain(chainConfig.name, `Recursion depth: ${recursionDepth + 1}`);
 
@@ -609,7 +529,7 @@ export class ClocktowerService {
       if (txStatus === 1) {
         if (recursionDepth + 1 < maxAllowedRecursions) {
           this.logger.chain(chainConfig.name, `Recursion ${recursionDepth + 1}/${maxAllowedRecursions}, recursing...`);
-          const more = await this.desmond(chainConfig, executionId, startTime, recursionDepth + 1, maxAllowedRecursions);
+          const more = await this.desmond(chainConfig, publicClient, executionId, startTime, recursionDepth + 1, maxAllowedRecursions);
           successfulTxs += more;
         } else {
           this.logger.chain(chainConfig.name, `Reached expected recursion limit (${maxAllowedRecursions}), stopping`);
