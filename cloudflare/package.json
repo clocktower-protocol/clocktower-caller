@@ -17,7 +17,7 @@
     "viem": "^2.21.1"
   },
   "devDependencies": {
-    "vitest": "^2.1.0",
+    "vitest": "^4.0.0",
     "wrangler": "^4.16.0"
   }
 }
