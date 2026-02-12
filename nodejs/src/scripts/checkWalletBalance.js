@@ -41,26 +41,28 @@ class WalletBalanceChecker {
       const ethBalance = await publicClient.getBalance({ address });
       const ethBalanceFormatted = formatEther(ethBalance);
 
-      // Get USDC balance
-      let usdcBalance = '0';
-      let usdcBalanceFormatted = '0';
-      
-      try {
-        const usdcBalanceRaw = await publicClient.readContract({
-          address: chain.usdcAddress,
-          abi: [{
-            name: 'balanceOf',
-            type: 'function',
-            inputs: [{ name: 'account', type: 'address' }],
-            outputs: [{ type: 'uint256' }],
-            stateMutability: 'view',
-          }],
-          functionName: 'balanceOf',
-          args: [address],
-        });
-        usdcBalanceFormatted = formatUnits(usdcBalanceRaw, 6);
-      } catch (error) {
-        this.logger.warn(`Failed to get USDC balance for ${chain.name}: ${error.message}`);
+      const erc20Abi = [{
+        name: 'balanceOf',
+        type: 'function',
+        inputs: [{ name: 'account', type: 'address' }],
+        outputs: [{ type: 'uint256' }],
+        stateMutability: 'view',
+      }];
+
+      const tokenBalances = [];
+      for (const token of chain.tokens) {
+        try {
+          const raw = await publicClient.readContract({
+            address: token.address,
+            abi: erc20Abi,
+            functionName: 'balanceOf',
+            args: [address],
+          });
+          tokenBalances.push({ symbol: token.symbol, balance: formatUnits(raw, token.decimals) });
+        } catch (error) {
+          this.logger.warn(`Failed to get ${token.symbol} balance for ${chain.name}: ${error.message}`);
+          tokenBalances.push({ symbol: token.symbol, balance: '0' });
+        }
       }
 
       return {
@@ -68,7 +70,8 @@ class WalletBalanceChecker {
         chainDisplayName: chain.displayName,
         address,
         ethBalance: ethBalanceFormatted,
-        usdcBalance: usdcBalanceFormatted,
+        tokenBalances,
+        usdcBalance: tokenBalances[0]?.balance ?? '0',
         timestamp: new Date().toISOString()
       };
     } catch (error) {
@@ -119,7 +122,9 @@ class WalletBalanceChecker {
         console.log(`❌ Error: ${result.error}`);
       } else {
         console.log(`💰 ETH Balance: ${result.ethBalance} ETH`);
-        console.log(`💵 USDC Balance: ${result.usdcBalance} USDC`);
+        (result.tokenBalances || []).forEach(t => {
+          console.log(`💵 ${t.symbol} Balance: ${t.balance}`);
+        });
       }
       
       console.log(`⏰ Checked: ${result.timestamp}`);

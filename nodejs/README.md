@@ -94,7 +94,9 @@ Each chain requires these variables (replace `CHAIN` with chain name):
 | `ALCHEMY_URL_CHAIN` | Alchemy RPC URL | `https://base-mainnet.g.alchemy.com/v2/` |
 | `CLOCKTOWER_ADDRESS_CHAIN` | Clocktower contract address | `0x1234...` |
 | `CHAIN_ID_CHAIN` | Chain ID | `8453` |
-| `USDC_ADDRESS_CHAIN` | USDC token address | `0x1234...` |
+| **Tokens** | Either `TOKENS_CHAIN` or `USDC_ADDRESS_CHAIN` (see below) | |
+| `TOKENS_CHAIN` | JSON array of tokens to track (full list for this chain). Objects: `address`, `symbol`, optional `name`, `decimals`. You can include USDC and others; when set, `USDC_ADDRESS_CHAIN` is optional. | `[{"address":"0x...","symbol":"USDC","name":"USD Coin","decimals":6}]` |
+| `USDC_ADDRESS_CHAIN` | Fallback when `TOKENS_CHAIN` is unset—tracks a single USDC token. | `0x1234...` |
 
 #### Optional Variables
 

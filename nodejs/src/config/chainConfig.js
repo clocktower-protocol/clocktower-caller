@@ -11,6 +11,33 @@ export class ChainConfigService {
   }
 
   /**
+   * Parse TOKENS_* JSON array or fall back to single USDC from USDC_ADDRESS_*
+   * @param {string} normalizedName - e.g. BASE, SEPOLIA_BASE
+   * @returns {Array<{address:string,symbol:string,name:string,decimals:number}>}
+   */
+  parseTokensForChain(normalizedName) {
+    const tokensRaw = process.env[`TOKENS_${normalizedName}`];
+    if (tokensRaw) {
+      try {
+        const arr = JSON.parse(tokensRaw);
+        if (Array.isArray(arr) && arr.length > 0) {
+          return arr.map(t => ({
+            address: t.address,
+            symbol: t.symbol || 'UNKNOWN',
+            name: t.name ?? t.symbol ?? 'Unknown Token',
+            decimals: typeof t.decimals === 'number' ? t.decimals : 18
+          }));
+        }
+      } catch (_) { /* ignore invalid JSON */ }
+    }
+    const usdcAddress = process.env[`USDC_ADDRESS_${normalizedName}`];
+    if (usdcAddress) {
+      return [{ address: usdcAddress, symbol: 'USDC', name: 'USD Coin', decimals: 6 }];
+    }
+    return [];
+  }
+
+  /**
    * Load chain configurations from environment variables
    * @returns {Array} Array of chain configuration objects
    */
@@ -19,13 +46,14 @@ export class ChainConfigService {
     
     return activeChains.map(chainName => {
       const normalizedName = chainName.toUpperCase().replace('-', '_');
-      
+      const tokens = this.parseTokensForChain(normalizedName);
       return {
         name: chainName,
         alchemyUrl: process.env[`ALCHEMY_URL_${normalizedName}`],
         clocktowerAddress: process.env[`CLOCKTOWER_ADDRESS_${normalizedName}`],
         chainId: parseInt(process.env[`CHAIN_ID_${normalizedName}`], 10),
-        usdcAddress: process.env[`USDC_ADDRESS_${normalizedName}`],
+        tokens,
+        usdcAddress: tokens[0]?.address,
         displayName: this.getDisplayName(chainName),
         isTestnet: this.isTestnet(chainName)
       };
@@ -63,19 +91,20 @@ export class ChainConfigService {
    * @returns {boolean} True if valid
    */
   validateChainConfig(chain) {
-    const required = ['alchemyUrl', 'clocktowerAddress', 'chainId', 'usdcAddress'];
+    const required = ['alchemyUrl', 'clocktowerAddress', 'chainId'];
     const missing = required.filter(field => !chain[field]);
-    
     if (missing.length > 0) {
       console.warn(`Chain ${chain.name} is missing required configuration: ${missing.join(', ')}`);
       return false;
     }
-    
+    if (!chain.tokens || chain.tokens.length === 0) {
+      console.warn(`Chain ${chain.name} has no tokens (set TOKENS_* or USDC_ADDRESS_*)`);
+      return false;
+    }
     if (isNaN(chain.chainId)) {
       console.warn(`Chain ${chain.name} has invalid chain ID: ${chain.chainId}`);
       return false;
     }
-    
     return true;
   }
 

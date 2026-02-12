@@ -147,8 +147,33 @@ async function sendChainErrorEmail(chainConfig, errorMessage, errorType, env, ad
   }
 }
 
+// Parse TOKENS_* JSON array or fall back to single USDC from USDC_ADDRESS_*
+function parseTokensForChain(env, chainKey) {
+  const tokensRaw = env[`TOKENS_${chainKey}`];
+  if (tokensRaw) {
+    try {
+      const arr = JSON.parse(tokensRaw);
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr.map(t => ({
+          address: t.address,
+          symbol: t.symbol || 'UNKNOWN',
+          name: t.name ?? t.symbol ?? 'Unknown Token',
+          decimals: typeof t.decimals === 'number' ? t.decimals : 18
+        }));
+      }
+    } catch (_) { /* ignore invalid JSON */ }
+  }
+  const usdcAddress = env[`USDC_ADDRESS_${chainKey}`];
+  if (usdcAddress) {
+    return [{ address: usdcAddress, symbol: 'USDC', name: 'USD Coin', decimals: 6 }];
+  }
+  return [];
+}
+
 // Chain configuration system
 function getChainConfigs(env) {
+  const baseTokens = parseTokensForChain(env, 'BASE');
+  const sepoliaTokens = parseTokensForChain(env, 'SEPOLIA_BASE');
   return [
     {
       chainId: parseInt(env.CHAIN_ID_BASE || '8453', 10),
@@ -156,9 +181,10 @@ function getChainConfigs(env) {
       displayName: 'Base',
       alchemyUrl: env.ALCHEMY_URL_BASE || 'https://base-mainnet.g.alchemy.com/v2/',
       clocktowerAddress: env.CLOCKTOWER_ADDRESS_BASE,
-      usdcAddress: env.USDC_ADDRESS_BASE,
+      tokens: baseTokens,
+      usdcAddress: baseTokens[0]?.address,
       explorerUrl: 'https://basescan.org',
-      enabled: env.CLOCKTOWER_ADDRESS_BASE !== undefined && env.USDC_ADDRESS_BASE !== undefined
+      enabled: env.CLOCKTOWER_ADDRESS_BASE !== undefined && baseTokens.length > 0
     },
     {
       chainId: parseInt(env.CHAIN_ID_SEPOLIA_BASE || '84532', 10),
@@ -166,9 +192,10 @@ function getChainConfigs(env) {
       displayName: 'Base Sepolia',
       alchemyUrl: env.ALCHEMY_URL_SEPOLIA_BASE || 'https://base-sepolia.g.alchemy.com/v2/',
       clocktowerAddress: env.CLOCKTOWER_ADDRESS_SEPOLIA_BASE,
-      usdcAddress: env.USDC_ADDRESS_SEPOLIA_BASE,
+      tokens: sepoliaTokens,
+      usdcAddress: sepoliaTokens[0]?.address,
       explorerUrl: 'https://sepolia.basescan.org',
-      enabled: env.CLOCKTOWER_ADDRESS_SEPOLIA_BASE !== undefined && env.USDC_ADDRESS_SEPOLIA_BASE !== undefined
+      enabled: env.CLOCKTOWER_ADDRESS_SEPOLIA_BASE !== undefined && sepoliaTokens.length > 0
     }
   ].filter(config => config.enabled);
 }
@@ -255,26 +282,22 @@ async function processChain(chainConfig, env, globalExecutionId) {
     }
   }
 
-  async function logTokenBalance(executionLogId, tokenAddress, balanceBefore, balanceAfter) {
+  async function logTokenBalance(executionLogId, tokenAddress, symbol, name, decimals, balanceBefore, balanceAfter) {
     try {
-      // Get or create token record using INSERT OR IGNORE to handle race conditions
-      // First try to insert, then query to get the ID
       await env.DB.prepare(`
         INSERT OR IGNORE INTO tokens (token_address, token_symbol, token_name, decimals, chain_name)
         VALUES (?, ?, ?, ?, ?)
-      `).bind(tokenAddress, 'USDC', 'USD Coin', 6, chainConfig.chainName).run();
-      
-      // Query to get the token ID (works whether insert happened or token already existed)
+      `).bind(tokenAddress, symbol, name, decimals, chainConfig.chainName).run();
+
       const token = await env.DB.prepare(`
         SELECT id FROM tokens WHERE token_address = ? AND chain_name = ?
       `).bind(tokenAddress, chainConfig.chainName).first();
-      
+
       if (!token) {
         console.error(`[${chainConfig.chainName}] Failed to get or create token record for ${tokenAddress}`);
         return;
       }
-      
-      // Insert token balance
+
       await env.DB.prepare(`
         INSERT INTO token_balances (execution_log_id, token_id, balance_before, balance_after)
         VALUES (?, ?, ?, ?)
@@ -284,16 +307,18 @@ async function processChain(chainConfig, env, globalExecutionId) {
     }
   }
 
-  async function sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, balanceBeforeUsdc, balanceAfterUsdc, recursionDepth) {
+  async function sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, tokenBalances, recursionDepth) {
     try {
-      // Only send email if email configuration is available
       if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
         console.log(`[${chainConfig.chainName}] Email configuration not available, skipping email notification`);
         return;
       }
 
-      // Wait for rate limit before sending
       await waitForEmailRateLimit();
+
+      const tokenBalanceLines = (tokenBalances || []).map(
+        t => `<p><strong>${t.symbol} Balance:</strong> ${t.balanceBefore} → ${t.balanceAfter}</p>`
+      ).join('');
 
       const resend = new Resend(env.RESEND_API_KEY);
       const subject = `✅ Clocktower Remit Success - ${chainConfig.displayName}`;
@@ -312,7 +337,7 @@ async function processChain(chainConfig, env, globalExecutionId) {
           <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="color: #166534; margin-top: 0;">Balance Changes</h3>
             <p><strong>ETH Balance:</strong> ${balanceBeforeEth} → ${balanceAfterEth}</p>
-            <p><strong>USDC Balance:</strong> ${balanceBeforeUsdc} → ${balanceAfterUsdc}</p>
+            ${tokenBalanceLines}
           </div>
           
           <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -812,15 +837,19 @@ async function processChain(chainConfig, env, globalExecutionId) {
       const balanceBeforeEth = formatEther(balance);
       console.log(`[${chainConfig.chainName}] ETH Balance Before: ${balanceBeforeEth}`);
 
-      // Get initial USDC balance
-      const usdcBalance = await publicClient.readContract({
-        address: chainConfig.usdcAddress,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [env.CALLER_ADDRESS],
-      });
-      const balanceBeforeUsdc = formatUnits(usdcBalance, 6);
-      console.log(`[${chainConfig.chainName}] USDC Balance Before: ${balanceBeforeUsdc}`);
+      // Get initial token balances
+      const balancesBefore = [];
+      for (const token of chainConfig.tokens) {
+        const raw = await publicClient.readContract({
+          address: token.address,
+          abi: erc20Abi,
+          functionName: 'balanceOf',
+          args: [env.CALLER_ADDRESS],
+        });
+        const formatted = formatUnits(raw, token.decimals);
+        balancesBefore.push({ ...token, balanceBefore: formatted });
+        console.log(`[${chainConfig.chainName}] ${token.symbol} Balance Before: ${formatted}`);
+      }
 
       // Execute transaction
       const txHash = await walletClient.writeContract({
@@ -851,21 +880,6 @@ async function processChain(chainConfig, env, globalExecutionId) {
           revertReason = error.message || 'Failed to get revert reason';
         }
         console.log(`[${chainConfig.chainName}] Failed: ${revertReason}`);
-        
-        // Send error email for failed transaction
-        await sendErrorEmail(
-          `Transaction failed: ${revertReason}`,
-          'Transaction Failure',
-          {
-            'Transaction Hash': txHash,
-            'Transaction Link': `${chainConfig.explorerUrl}/tx/${txHash}`,
-            'Recursion Depth': recursionDepth.toString(),
-            'ETH Balance Before': balanceBeforeEth,
-            'ETH Balance After': balanceAfterEth,
-            'USDC Balance Before': balanceBeforeUsdc,
-            'USDC Balance After': balanceAfterUsdc
-          }
-        );
       }
 
       // Get final ETH balance
@@ -873,15 +887,40 @@ async function processChain(chainConfig, env, globalExecutionId) {
       const balanceAfterEth = formatEther(balance2);
       console.log(`[${chainConfig.chainName}] ETH Balance After: ${balanceAfterEth}`);
 
-      // Get final USDC balance
-      const usdcBalance2 = await publicClient.readContract({
-        address: chainConfig.usdcAddress,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [env.CALLER_ADDRESS],
-      });
-      const balanceAfterUsdc = formatUnits(usdcBalance2, 6);
-      console.log(`[${chainConfig.chainName}] USDC Balance After: ${balanceAfterUsdc}`);
+      // Get final token balances and build tokenBalances for emails/logging
+      const tokenBalances = [];
+      for (let i = 0; i < chainConfig.tokens.length; i++) {
+        const token = chainConfig.tokens[i];
+        const raw2 = await publicClient.readContract({
+          address: token.address,
+          abi: erc20Abi,
+          functionName: 'balanceOf',
+          args: [env.CALLER_ADDRESS],
+        });
+        const balanceAfter = formatUnits(raw2, token.decimals);
+        const balanceBefore = balancesBefore[i]?.balanceBefore ?? '0';
+        tokenBalances.push({ symbol: token.symbol, balanceBefore, balanceAfter });
+        console.log(`[${chainConfig.chainName}] ${token.symbol} Balance After: ${balanceAfter}`);
+      }
+
+      if (txStatus === 0) {
+        const errorDetails = {
+          'Transaction Hash': txHash,
+          'Transaction Link': `${chainConfig.explorerUrl}/tx/${txHash}`,
+          'Recursion Depth': recursionDepth.toString(),
+          'ETH Balance Before': balanceBeforeEth,
+          'ETH Balance After': balanceAfterEth,
+        };
+        tokenBalances.forEach(t => {
+          errorDetails[`${t.symbol} Balance Before`] = t.balanceBefore;
+          errorDetails[`${t.symbol} Balance After`] = t.balanceAfter;
+        });
+        await sendErrorEmail(
+          `Transaction failed: ${revertReason}`,
+          'Transaction Failure',
+          errorDetails
+        );
+      }
 
       // Log to database
       const executionLogId = await logToDatabase({
@@ -904,12 +943,24 @@ async function processChain(chainConfig, env, globalExecutionId) {
 
       // Log token balances
       if (executionLogId) {
-        await logTokenBalance(executionLogId, chainConfig.usdcAddress, parseFloat(balanceBeforeUsdc), parseFloat(balanceAfterUsdc));
+        for (let i = 0; i < chainConfig.tokens.length; i++) {
+          const token = chainConfig.tokens[i];
+          const tb = tokenBalances[i];
+          await logTokenBalance(
+            executionLogId,
+            token.address,
+            token.symbol,
+            token.name,
+            token.decimals,
+            parseFloat(tb.balanceBefore),
+            parseFloat(tb.balanceAfter)
+          );
+        }
       }
 
       // Send success email notification
       if (txStatus === 1) {
-        await sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, balanceBeforeUsdc, balanceAfterUsdc, recursionDepth);
+        await sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, tokenBalances, recursionDepth);
       }
 
       // Recursive call on success - use pre-calculated max allowed recursions

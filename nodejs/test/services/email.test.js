@@ -69,8 +69,7 @@ describe('EmailService', () => {
         '0x1234',
         '1.0',
         '0.9',
-        '100.0',
-        '200.0',
+        [{ symbol: 'USDC', balanceBefore: '100.0', balanceAfter: '200.0' }],
         0
       );
       expect(result).toBeNull();
@@ -86,8 +85,7 @@ describe('EmailService', () => {
         '0x1234567890123456789012345678901234567890123456789012345678901234',
         '1.0',
         '0.9',
-        '100.0',
-        '200.0',
+        [{ symbol: 'USDC', balanceBefore: '100.0', balanceAfter: '200.0' }],
         0
       );
       
