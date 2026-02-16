@@ -284,14 +284,23 @@ async function processChain(chainConfig, env, globalExecutionId) {
 
   async function logTokenBalance(executionLogId, tokenAddress, symbol, name, decimals, balanceBefore, balanceAfter) {
     try {
-      await env.DB.prepare(`
-        INSERT OR IGNORE INTO tokens (token_address, token_symbol, token_name, decimals, chain_name)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(tokenAddress, symbol, name, decimals, chainConfig.chainName).run();
-
-      const token = await env.DB.prepare(`
+      // Try to get existing token first
+      let token = await env.DB.prepare(`
         SELECT id FROM tokens WHERE token_address = ? AND chain_name = ?
       `).bind(tokenAddress, chainConfig.chainName).first();
+
+      // If not found, insert it
+      if (!token) {
+        await env.DB.prepare(`
+          INSERT INTO tokens (token_address, token_symbol, token_name, decimals, chain_name)
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(tokenAddress, symbol, name, decimals, chainConfig.chainName).run();
+        
+        // Select again to get the ID
+        token = await env.DB.prepare(`
+          SELECT id FROM tokens WHERE token_address = ? AND chain_name = ?
+        `).bind(tokenAddress, chainConfig.chainName).first();
+      }
 
       if (!token) {
         console.error(`[${chainConfig.chainName}] Failed to get or create token record for ${tokenAddress}`);
