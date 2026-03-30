@@ -8,6 +8,10 @@ CALLER_ADDRESS=0x0000000000000000000000000000000000000000
 CALLER_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000000
 ALCHEMY_API_KEY=your_alchemy_api_key_here
 
+# Token lists per chain (JSON arrays). Defaults match wrangler.jsonc; override here for local dev.
+TOKENS_BASE=[{"address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","symbol":"USDC","name":"USD Coin","decimals":6}]
+TOKENS_SEPOLIA_BASE=[{"address":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","symbol":"USDC","name":"USD Coin","decimals":6}]
+
 # Email Notifications (Optional)
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 NOTIFICATION_EMAIL=your-email@example.com
