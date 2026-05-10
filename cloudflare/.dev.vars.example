@@ -12,7 +12,7 @@ ALCHEMY_API_KEY=your_alchemy_api_key_here
 TOKENS_BASE=[{"address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","symbol":"USDC","name":"USD Coin","decimals":6}]
 TOKENS_SEPOLIA_BASE=[{"address":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","symbol":"USDC","name":"USD Coin","decimals":6}]
 
-# Email Notifications (Optional)
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Email Notifications (Optional) — Cloudflare Email Service
+# Onboard your domain under Dashboard → Email Sending before sending.
 NOTIFICATION_EMAIL=your-email@example.com
-SENDER_ADDRESS=onboarding@resend.dev
+SENDER_ADDRESS=noreply@yourdomain.com
