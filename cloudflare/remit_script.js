@@ -2,7 +2,6 @@ import { createPublicClient, createWalletClient, http, formatEther, formatUnits 
 import { privateKeyToAccount } from 'viem/accounts';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { Resend } from 'resend';
 dayjs.extend(utc);
 
 // Inline ABI (only includes remit function and nextUncheckedDay function)  
@@ -57,35 +56,30 @@ const MAX_RECURSION_DEPTH = 5;
 // Chunk size for multicall (avoid RPC/calldata limits)
 const MULTICALL_CHUNK_SIZE = 100;
 
-// Email rate limiter - ensures we don't exceed Resend's 2 requests/second limit
-let lastEmailTimestamp = 0;
-const MIN_EMAIL_INTERVAL_MS = 500; // 500ms = max 2 emails per second
-
-async function waitForEmailRateLimit() {
-  const now = Date.now();
-  const timeSinceLastEmail = now - lastEmailTimestamp;
-  
-  if (timeSinceLastEmail < MIN_EMAIL_INTERVAL_MS) {
-    const waitTime = MIN_EMAIL_INTERVAL_MS - timeSinceLastEmail;
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+/**
+ * Send notification email via Cloudflare Email Service (send_email binding).
+ * Requires env.EMAIL, NOTIFICATION_EMAIL, and SENDER_ADDRESS (verified sender on onboarded domain).
+ */
+async function sendNotificationEmail(env, logPrefix, { subject, html }) {
+  if (!env.EMAIL || !env.NOTIFICATION_EMAIL || !env.SENDER_ADDRESS) {
+    console.log(`${logPrefix} Email not configured (EMAIL binding, NOTIFICATION_EMAIL, SENDER_ADDRESS), skipping notification`);
+    return null;
   }
-  
-  lastEmailTimestamp = Date.now();
+
+  const result = await env.EMAIL.send({
+    from: env.SENDER_ADDRESS,
+    to: env.NOTIFICATION_EMAIL,
+    subject,
+    html,
+  });
+
+  console.log(`${logPrefix} Email sent:`, result.messageId);
+  return result;
 }
 
 // Helper function to send error emails from outside processChain scope
 async function sendChainErrorEmail(chainConfig, errorMessage, errorType, env, additionalDetails = {}) {
   try {
-    // Only send email if email configuration is available
-    if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
-      console.log(`[${chainConfig.chainName}] Email configuration not available, skipping error email notification`);
-      return;
-    }
-
-    // Wait for rate limit before sending
-    await waitForEmailRateLimit();
-
-    const resend = new Resend(env.RESEND_API_KEY);
     const subject = `❌ Clocktower Error - ${chainConfig.displayName}`;
     
     // Build additional details HTML
@@ -130,22 +124,9 @@ async function sendChainErrorEmail(chainConfig, errorMessage, errorType, env, ad
       </div>
     `;
 
-    const { data, error } = await resend.emails.send({
-      from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
-      to: [env.NOTIFICATION_EMAIL],
-      subject: subject,
-      html: htmlContent,
-    });
-
-    if (error) {
-      console.error(`[${chainConfig.chainName}] Error email send failed:`, error);
-      throw new Error(`Email error: ${error.message}`);
-    }
-
-    console.log(`[${chainConfig.chainName}] Error email sent:`, data.id);
-    return data;
+    return await sendNotificationEmail(env, `[${chainConfig.chainName}]`, { subject, html: htmlContent });
   } catch (error) {
-    console.error(`[${chainConfig.chainName}] Failed to send error email:`, error);
+    console.error(`[${chainConfig.chainName}] Failed to send error email:`, error?.code || '', error?.message || error);
     // Don't throw here - we don't want email failures to break the error handling flow
   }
 }
@@ -318,18 +299,10 @@ async function processChain(chainConfig, env, globalExecutionId) {
 
   async function sendSuccessEmail(txHash, balanceBeforeEth, balanceAfterEth, tokenBalances, recursionDepth) {
     try {
-      if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
-        console.log(`[${chainConfig.chainName}] Email configuration not available, skipping email notification`);
-        return;
-      }
-
-      await waitForEmailRateLimit();
-
       const tokenBalanceLines = (tokenBalances || []).map(
         t => `<p><strong>${t.symbol} Balance:</strong> ${t.balanceBefore} → ${t.balanceAfter}</p>`
       ).join('');
 
-      const resend = new Resend(env.RESEND_API_KEY);
       const subject = `✅ Clocktower Remit Success - ${chainConfig.displayName}`;
       const htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -360,38 +333,15 @@ async function processChain(chainConfig, env, globalExecutionId) {
         </div>
       `;
 
-      const { data, error } = await resend.emails.send({
-        from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
-        to: [env.NOTIFICATION_EMAIL],
-        subject: subject,
-        html: htmlContent,
-      });
-
-      if (error) {
-        console.error(`[${chainConfig.chainName}] Email error:`, error);
-        throw new Error(`Email error: ${error.message}`);
-      }
-
-      console.log(`[${chainConfig.chainName}] Success email sent:`, data.id);
-      return data;
+      return await sendNotificationEmail(env, `[${chainConfig.chainName}]`, { subject, html: htmlContent });
     } catch (error) {
-      console.error(`[${chainConfig.chainName}] Failed to send success email:`, error);
+      console.error(`[${chainConfig.chainName}] Failed to send success email:`, error?.code || '', error?.message || error);
       throw error;
     }
   }
 
   async function sendNoSubscriptionsEmail(currentDay, nextUncheckedDay) {
     try {
-      // Only send email if email configuration is available
-      if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
-        console.log(`[${chainConfig.chainName}] Email configuration not available, skipping no subscriptions email notification`);
-        return;
-      }
-
-      // Wait for rate limit before sending
-      await waitForEmailRateLimit();
-
-      const resend = new Resend(env.RESEND_API_KEY);
       const subject = `📭 Clocktower No Subscriptions - ${chainConfig.displayName}`;
       const htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -426,38 +376,15 @@ async function processChain(chainConfig, env, globalExecutionId) {
         </div>
       `;
 
-      const { data, error } = await resend.emails.send({
-        from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
-        to: [env.NOTIFICATION_EMAIL],
-        subject: subject,
-        html: htmlContent,
-      });
-
-      if (error) {
-        console.error(`[${chainConfig.chainName}] No subscriptions email error:`, error);
-        throw new Error(`Email error: ${error.message}`);
-      }
-
-      console.log(`[${chainConfig.chainName}] No subscriptions email sent:`, data.id);
-      return data;
+      return await sendNotificationEmail(env, `[${chainConfig.chainName}]`, { subject, html: htmlContent });
     } catch (error) {
-      console.error(`[${chainConfig.chainName}] Failed to send no subscriptions email:`, error);
+      console.error(`[${chainConfig.chainName}] Failed to send no subscriptions email:`, error?.code || '', error?.message || error);
       throw error;
     }
   }
 
   async function sendErrorEmail(errorMessage, errorType, additionalDetails = {}) {
     try {
-      // Only send email if email configuration is available
-      if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL) {
-        console.log(`[${chainConfig.chainName}] Email configuration not available, skipping error email notification`);
-        return;
-      }
-
-      // Wait for rate limit before sending
-      await waitForEmailRateLimit();
-
-      const resend = new Resend(env.RESEND_API_KEY);
       const subject = `❌ Clocktower Error - ${chainConfig.displayName}`;
       
       // Build additional details HTML
@@ -502,22 +429,9 @@ async function processChain(chainConfig, env, globalExecutionId) {
         </div>
       `;
 
-      const { data, error } = await resend.emails.send({
-        from: env.SENDER_ADDRESS || 'onboarding@resend.dev',
-        to: [env.NOTIFICATION_EMAIL],
-        subject: subject,
-        html: htmlContent,
-      });
-
-      if (error) {
-        console.error(`[${chainConfig.chainName}] Error email send failed:`, error);
-        throw new Error(`Email error: ${error.message}`);
-      }
-
-      console.log(`[${chainConfig.chainName}] Error email sent:`, data.id);
-      return data;
+      return await sendNotificationEmail(env, `[${chainConfig.chainName}]`, { subject, html: htmlContent });
     } catch (error) {
-      console.error(`[${chainConfig.chainName}] Failed to send error email:`, error);
+      console.error(`[${chainConfig.chainName}] Failed to send error email:`, error?.code || '', error?.message || error);
       // Don't throw here - we don't want email failures to break the error handling flow
     }
   }

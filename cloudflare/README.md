@@ -107,9 +107,12 @@ The script requires the following environment variables:
 
 ### Email Notifications (Optional)
 
-- `RESEND_API_KEY`: Resend API key for sending email notifications (set as secret)
-- `NOTIFICATION_EMAIL`: Email address to receive notifications (set as secret)
-- `SENDER_ADDRESS`: Sender email address (defaults to 'onboarding@resend.dev' if not provided)
+Uses [Cloudflare Email Service](https://developers.cloudflare.com/email-service/) (`send_email` binding `EMAIL` in `wrangler.jsonc`). Onboard your domain under Dashboard → **Email Sending**, use **Workers Paid**, then set:
+
+- `NOTIFICATION_EMAIL`: Recipient for alerts (secret)
+- `SENDER_ADDRESS`: Verified sender address on your onboarded domain (secret; required when notifications are enabled)
+
+There is no third-party API key; sending goes through the Worker binding.
 
 ## Local Development Setup
 
@@ -127,10 +130,11 @@ For local development, secrets are managed using a `.dev.vars` file. This file i
    CALLER_ADDRESS=0xYourActualAddress
    CALLER_PRIVATE_KEY=0xYourActualPrivateKey
    ALCHEMY_API_KEY=your_actual_alchemy_key
-   RESEND_API_KEY=re_your_actual_resend_key
    NOTIFICATION_EMAIL=your-email@example.com
-   SENDER_ADDRESS=your-sender@example.com
+   SENDER_ADDRESS=noreply@your-verified-domain.com
    ```
+
+   With `send_email.remote: true` in `wrangler.jsonc`, local `wrangler dev` sends real mail via Email Service—use test addresses if needed. See [local development - sending](https://developers.cloudflare.com/email-service/local-development/sending/).
 
 3. **Run locally:**
    ```bash
@@ -148,7 +152,6 @@ For production deployments, secrets must be set using Cloudflare's secret manage
 wrangler secret put CALLER_PRIVATE_KEY
 wrangler secret put CALLER_ADDRESS
 wrangler secret put ALCHEMY_API_KEY
-wrangler secret put RESEND_API_KEY
 wrangler secret put NOTIFICATION_EMAIL
 wrangler secret put SENDER_ADDRESS
 ```
