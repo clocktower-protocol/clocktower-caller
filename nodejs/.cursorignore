@@ -1,0 +1,31 @@
+# --- Secrets (hard block; do not rely on .gitignore alone) ---
+.env
+.env.*
+!.env.example
+.env.wallet
+*.env.wallet
+
+# --- Dependencies & VCS ---
+node_modules/
+.git/
+
+# --- Build & test outputs ---
+dist/
+build/
+coverage/
+.nyc_output/
+
+# --- Runtime data ---
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Lockfiles ---
+package-lock.json
+
+# --- IDE / OS noise ---
+.vscode/
+.idea/
+.DS_Store
