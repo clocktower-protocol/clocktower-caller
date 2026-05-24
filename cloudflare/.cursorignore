@@ -6,28 +6,9 @@
 !.dev.vars.example
 *.env
 
-# --- Dependencies & VCS ---
-node_modules/
+# --- VCS (hooks visible for agent sandbox) ---
 .git/
-
-# --- Cloudflare local state ---
-.wrangler/
-.wrangler.toml
-
-# --- Build & test outputs ---
-dist/
-build/
-coverage/
-.nyc_output/
-
-# --- Lockfiles & logs ---
-package-lock.json
-*.log
-
-# --- Local DB (testing) ---
-*.db
-*.sqlite
-*.sqlite3
+!.git/hooks/
 
 # --- IDE / OS noise ---
 .vscode/

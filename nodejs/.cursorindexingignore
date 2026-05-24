@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+package-lock.json
