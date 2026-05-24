@@ -5,25 +5,9 @@
 .env.wallet
 *.env.wallet
 
-# --- Dependencies & VCS ---
-node_modules/
+# --- VCS (hooks visible for agent sandbox) ---
 .git/
-
-# --- Build & test outputs ---
-dist/
-build/
-coverage/
-.nyc_output/
-
-# --- Runtime data ---
-logs/
-*.log
-*.db
-*.sqlite
-*.sqlite3
-
-# --- Lockfiles ---
-package-lock.json
+!.git/hooks/
 
 # --- IDE / OS noise ---
 .vscode/
