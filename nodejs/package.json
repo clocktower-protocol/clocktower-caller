@@ -24,7 +24,6 @@
   "author": "Clocktower LLC",
   "license": "MIT",
   "dependencies": {
-    "better-sqlite3": "^12.4.1",
     "dayjs": "^1.11.13",
     "dotenv": "^17.0.0",
     "pg": "^8.11.3",
@@ -40,7 +39,7 @@
     "esbuild": "0.28.1"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.13.0"
   },
   "overrides": {
     "esbuild": "0.28.1",

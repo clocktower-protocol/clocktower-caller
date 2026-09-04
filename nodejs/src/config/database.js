@@ -197,10 +197,9 @@ export class DatabaseConfigService {
       };
     }
 
-    // SQLite options
+    // SQLite options for node:sqlite DatabaseSync
     return {
-      filename: this.config.path,
-      verbose: process.env.NODE_ENV === 'development' ? console.log : null
+      filename: this.config.path
     };
   }
 }

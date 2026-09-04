@@ -16,6 +16,8 @@ A unified Node.js application for executing Clocktower Protocol `remit` transact
 
 ## Quick Start
 
+Requires **Node.js 22.13+** (uses the built-in `node:sqlite` module; no native SQLite addon).
+
 ### 1. Installation
 
 ```bash

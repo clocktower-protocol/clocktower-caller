@@ -171,8 +171,9 @@ Tests should be run in CI/CD pipelines before merging code. The test suite shoul
 - Check that file paths in imports are correct
 
 ### Database tests failing
-- Database tests use mocks and should not require actual database connections
-- If using real database, ensure test database is configured separately
+- SQLite tests use Node's built-in `node:sqlite` with an in-memory database
+- They do not require `better-sqlite3` or a file-backed database
+- If using PostgreSQL, ensure the test database is configured separately
 
 ### Environment variable issues
 - Use `vi.stubEnv()` to set environment variables in tests

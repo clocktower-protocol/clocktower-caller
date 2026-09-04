@@ -74,13 +74,15 @@ export class DatabaseService {
    */
   async connectSQLite() {
     try {
-      const Database = (await import('better-sqlite3')).default;
+      const { DatabaseSync } = await import('node:sqlite');
       const options = this.config.getConnectionOptions();
-      
-      this.db = new Database(options.filename, { verbose: options.verbose });
-      
-      // Enable WAL mode for better concurrency
-      this.db.pragma('journal_mode = WAL');
+
+      this.db = new DatabaseSync(options.filename, {
+        enableForeignKeyConstraints: true
+      });
+
+      // WAL is a no-op for :memory: databases; still useful for file-backed DBs
+      this.db.exec('PRAGMA journal_mode = WAL');
       
       this.logger.info(`Connected to SQLite database: ${options.filename}`);
     } catch (error) {
@@ -214,7 +216,8 @@ export class DatabaseService {
         ];
         const stmt = this.db.prepare(sql);
         const result = stmt.run(...params);
-        return result.lastInsertRowid;
+        // node:sqlite may return BigInt; callers expect a number
+        return Number(result.lastInsertRowid);
       } else if (this.config.isPostgreSQL()) {
         const params = [
           data.execution_id,
