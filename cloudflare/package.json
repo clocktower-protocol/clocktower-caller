@@ -23,5 +23,10 @@
     "esbuild": "0.28.1",
     "undici": "7.28.0",
     "ws": "8.21.0"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "sharp": true,
+    "workerd": true
   }
 }
